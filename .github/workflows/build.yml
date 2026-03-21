@@ -101,6 +101,30 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Install imagemagick for icon generation
+        run: sudo apt-get install -y imagemagick
+
+      - name: Generate Android app icons from logo.png
+        run: |
+          LOGO="public/logo.png"
+          RES="android/app/src/main/res"
+          declare -A SIZES=(
+            ["mipmap-mdpi"]=48
+            ["mipmap-hdpi"]=72
+            ["mipmap-xhdpi"]=96
+            ["mipmap-xxhdpi"]=144
+            ["mipmap-xxxhdpi"]=192
+          )
+          for DIR in "${!SIZES[@]}"; do
+            SIZE=${SIZES[$DIR]}
+            mkdir -p "$RES/$DIR"
+            convert "$LOGO" -resize ${SIZE}x${SIZE} "$RES/$DIR/ic_launcher.png"
+            convert "$LOGO" -resize ${SIZE}x${SIZE} \
+              \( +clone -alpha extract -draw "fill black polygon 0,0 0,${SIZE} ${SIZE},0 fill white circle $((SIZE/2)),$((SIZE/2)) $((SIZE/2)),0" \
+              -alpha off -compose CopyOpacity -composite \) \
+              -flatten "$RES/$DIR/ic_launcher_round.png"
+          done
+
       - name: Install dependencies
         run: npm install
 
@@ -113,11 +137,8 @@ jobs:
           VITE_BASE_PATH:              /
         run: npm run build
 
-      - name: Sync Capacitor and install Android deps
-        run: |
-          npx cap sync android
-          cd android
-          npm install 2>/dev/null || true
+      - name: Sync Capacitor
+        run: npx cap sync android
 
       - name: Fix Gradle wrapper
         run: |
@@ -130,7 +151,7 @@ jobs:
       - name: Build debug APK
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
