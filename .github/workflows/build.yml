@@ -108,21 +108,17 @@ jobs:
         run: |
           LOGO="public/logo.png"
           RES="android/app/src/main/res"
-          declare -A SIZES=(
-            ["mipmap-mdpi"]=48
-            ["mipmap-hdpi"]=72
-            ["mipmap-xhdpi"]=96
-            ["mipmap-xxhdpi"]=144
-            ["mipmap-xxxhdpi"]=192
-          )
-          for DIR in "${!SIZES[@]}"; do
-            SIZE=${SIZES[$DIR]}
-            mkdir -p "$RES/$DIR"
-            convert "$LOGO" -resize ${SIZE}x${SIZE} "$RES/$DIR/ic_launcher.png"
-            convert "$LOGO" -resize ${SIZE}x${SIZE} \
-              \( +clone -alpha extract -draw "fill black polygon 0,0 0,${SIZE} ${SIZE},0 fill white circle $((SIZE/2)),$((SIZE/2)) $((SIZE/2)),0" \
-              -alpha off -compose CopyOpacity -composite \) \
-              -flatten "$RES/$DIR/ic_launcher_round.png"
+          for DENSITY in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            case $DENSITY in
+              mdpi)     SIZE=48  ;;
+              hdpi)     SIZE=72  ;;
+              xhdpi)    SIZE=96  ;;
+              xxhdpi)   SIZE=144 ;;
+              xxxhdpi)  SIZE=192 ;;
+            esac
+            mkdir -p "$RES/mipmap-$DENSITY"
+            convert "$LOGO" -resize ${SIZE}x${SIZE} "$RES/mipmap-$DENSITY/ic_launcher.png"
+            cp "$RES/mipmap-$DENSITY/ic_launcher.png" "$RES/mipmap-$DENSITY/ic_launcher_round.png"
           done
 
       - name: Install dependencies
