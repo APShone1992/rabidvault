@@ -6,6 +6,12 @@
 const PROXY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/comicvine-proxy`
 const ANON  = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+// Route ComicVine image URLs through the proxy to avoid hotlink blocking
+function proxyImage(url) {
+  if (!url) return ''
+  return `${PROXY}?image=${encodeURIComponent(url)}`
+}
+
 async function cv(endpoint, params = {}) {
   const url = new URL(PROXY)
   url.searchParams.set('endpoint', endpoint)
@@ -29,36 +35,34 @@ export function norm(raw) {
     title:        raw.volume?.name || raw.name || 'Unknown',
     issue_number: raw.issue_number ? `#${raw.issue_number}` : '',
     publisher:    raw.volume?.publisher?.name || '',
-    cover_url:    raw.image?.medium_url   || raw.image?.original_url || '',
-    thumb_url:    raw.image?.thumb_url    || raw.image?.medium_url   || '',
+    cover_url:    proxyImage(raw.image?.medium_url   || raw.image?.original_url || ''),
+    thumb_url:    proxyImage(raw.image?.thumb_url    || raw.image?.medium_url   || ''),
     releaseDate:  raw.cover_date || '',
     variantCount: (raw.associated_images || []).length,
     hasVariants:  (raw.associated_images || []).length > 0,
   }
 }
 
-// ── Upcoming releases grouped by release week ─────────────────
 export async function fetchUpcomingReleases(monthsAhead = 4) {
   try {
-  const today  = new Date()
-  const future = new Date(today)
-  future.setMonth(future.getMonth() + monthsAhead)
+    const today  = new Date()
+    const future = new Date(today)
+    future.setMonth(future.getMonth() + monthsAhead)
 
-  const data = await cv('issues', {
-    filter:     `cover_date:${fmt(today)}|${fmt(future)}`,
-    field_list: 'id,name,issue_number,cover_date,image,volume,associated_images',
-    sort:       'cover_date:asc',
-    limit:      100,
-  })
+    const data = await cv('issues', {
+      filter:     `cover_date:${fmt(today)}|${fmt(future)}`,
+      field_list: 'id,name,issue_number,cover_date,image,volume,associated_images',
+      sort:       'cover_date:asc',
+      limit:      100,
+    })
 
-  return (data.results || []).map(norm)
+    return (data.results || []).map(norm)
   } catch (err) {
-    console.warn("[releases]", err?.message)
+    console.warn('[releases]', err?.message)
     return []
   }
 }
 
-// ── Full issue detail + all variant covers ────────────────────
 export async function fetchVariants(comicvineId) {
   const data = await cv(`issue/4000-${comicvineId}`, {
     field_list: 'id,name,issue_number,image,associated_images,volume,cover_date,description,character_credits,story_arc_credits',
@@ -70,16 +74,16 @@ export async function fetchVariants(comicvineId) {
   const mainCover = {
     id:     `main-${issue.id}`,
     label:  'Main Cover',
-    url:    issue.image?.original_url || issue.image?.medium_url || '',
-    thumb:  issue.image?.medium_url   || issue.image?.thumb_url  || '',
+    url:    proxyImage(issue.image?.original_url || issue.image?.medium_url || ''),
+    thumb:  proxyImage(issue.image?.medium_url   || issue.image?.thumb_url  || ''),
     isMain: true,
   }
 
   const variants = (issue.associated_images || []).map((img, i) => ({
     id:     `v-${issue.id}-${i}`,
     label:  `Variant ${String.fromCharCode(65 + i)}`,
-    url:    img.original_url || img.medium_url || '',
-    thumb:  img.medium_url   || img.original_url || '',
+    url:    proxyImage(img.original_url || img.medium_url || ''),
+    thumb:  proxyImage(img.medium_url   || img.original_url || ''),
     isMain: false,
   }))
 
@@ -92,7 +96,6 @@ export async function fetchVariants(comicvineId) {
   }
 }
 
-// ── Search upcoming ───────────────────────────────────────────
 export async function searchUpcoming(query, monthsAhead = 6) {
   const today  = new Date()
   const future = new Date(today)
@@ -110,7 +113,6 @@ export async function searchUpcoming(query, monthsAhead = 6) {
     .map(norm)
 }
 
-// ── Group issues by Wednesday release date ────────────────────
 export function groupByWeek(issues) {
   return issues.reduce((acc, issue) => {
     const d   = new Date(issue.releaseDate)
