@@ -1,28 +1,46 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
+import { saveToCache, loadFromCache } from '../lib/offlineCache'
+// snapshot is triggered manually from Dashboard after load
 
-const AchievementsContext = createContext(null)
-const XP_PER_LEVEL = 1000
+const CollectionContext = createContext(null)
 
-export function AchievementsProvider({ children }) {
-  const { user, profile } = useAuth()
-  const [achievements,     setAchievements]     = useState([])
-  const [userAchievements, setUserAchievements] = useState([])
-  const [loading,          setLoading]          = useState(true)
+export function CollectionProvider({ children }) {
+  const { user } = useAuth()
+  const [collection, setCollection] = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState(null)
 
   const fetch = useCallback(async () => {
     if (!user) { setLoading(false); return }
     setLoading(true)
     try {
-      const [{ data: all }, { data: mine }] = await Promise.all([
-        supabase.from('achievements').select('*').order('xp_reward'),
-        supabase.from('user_achievements').select('achievement_id, unlocked_at, achievements(id,name,icon,description,xp_reward,tier)').eq('user_id', user?.id),
-      ])
-      setAchievements(all || [])
-      setUserAchievements(mine || [])
-    } catch (_) {
-      // Achievements unavailable - non-critical feature
+      const { data, error } = await supabase
+        .from('collection')
+        .select(`
+          *,
+          comics (
+            id, title, issue_number, publisher,
+            cover_url, comicvine_id,
+            volume_id, volume_issue_count, deck
+          )
+        `)
+        .eq('user_id', user?.id)
+        .order('added_at', { ascending: false })
+
+      if (error) {
+        const cached = await loadFromCache(`collection-${user.id}`)
+        if (cached) { setCollection(cached); setError('') }
+        else setError(error.message)
+      } else {
+        setCollection(data || [])
+        if (data) saveToCache(`collection-${user.id}`, data)
+      }
+    } catch (err) {
+      const cached = await loadFromCache(`collection-${user?.id}`)
+      if (cached) setCollection(cached)
+      else setError('Failed to load collection. Check your connection.')
     } finally {
       setLoading(false)
     }
@@ -30,55 +48,149 @@ export function AchievementsProvider({ children }) {
 
   useEffect(() => { fetch() }, [fetch])
 
-  async function awardXP(amount, reason) {
-    if (!user || !profile) return
-    const newXP    = (profile.xp    || 0) + amount
-    const newLevel = Math.floor(newXP / XP_PER_LEVEL) + 1
-    await Promise.all([
-      supabase.from('profiles').update({ xp: newXP, level: newLevel }).eq('id', user.id),
-      supabase.from('xp_log').insert({ user_id: user.id, amount, reason }),
-    ])
-  }
+  // Allow any component to trigger a collection refresh via custom event
+  useEffect(() => {
+    const handler = () => fetch()
+    window.addEventListener('rv-collection-refresh', handler)
+    return () => window.removeEventListener('rv-collection-refresh', handler)
+  }, [fetch])
 
-  async function checkAchievement(achievementId) {
-    if (!user) return false
-    if (userAchievements.some(ua => ua.achievement_id === achievementId)) return false
-    const { error } = await supabase.from('user_achievements')
-      .insert({ user_id: user.id, achievement_id: achievementId })
-    if (!error) {
-      const ach = achievements.find(a => a.id === achievementId)
-      if (ach) {
-        await awardXP(ach.xp_reward, `Achievement: ${ach.name}`)
-        setUserAchievements(prev => [...prev, { achievement_id: achievementId, achievements: ach }])
-        return true
-      }
+  // ── Memoised stats (only recalculate when collection changes) ──
+  const stats = useMemo(() => {
+    const safe = collection || []
+    return {
+    total:      safe.length,
+    totalValue: safe.reduce((s, c) => s + Number(c.current_value || 0), 0),
+    totalSpent: safe.reduce((s, c) => s + Number(c.paid_price    || 0), 0),
+    publishers: [...new Set(safe.map(c => c.comics?.publisher).filter(Boolean))].length,
+    read:       safe.filter(c => !!c.read_at).length,
+    unread:     safe.filter(c => !c.read_at).length,
     }
-    return false
+  }, [collection])
+
+  // ── Memoised series grouping ────────────────────────────────
+  const series = useMemo(() => {
+    const map = {}
+    ;(collection || []).forEach(c => {
+      const vid = c.comics?.volume_id
+      if (!vid) return
+      if (!map[vid]) {
+        map[vid] = {
+          volume_id: vid,
+          name:      c.comics?.title || 'Unknown',
+          publisher: c.comics?.publisher || '',
+          total:     c.comics?.volume_issue_count || null,
+          owned:     0, issues: [],
+        }
+      }
+      map[vid].owned++
+      map[vid].issues.push(c)
+    })
+    return Object.values(map).sort((a, b) => {
+      const ac = a.total && a.owned >= a.total
+      const bc = b.total && b.owned >= b.total
+      if (ac && !bc) return -1
+      if (!ac && bc) return 1
+      return b.owned - a.owned
+    })
+  }, [collection])
+
+  // ── Mutations (optimistic updates — no refetch needed) ──────
+  async function addComic({ title, issue_number, publisher, cover_url, comicvine_id,
+                            grade, paid_price, current_value, notes,
+                            description, deck, volume_id, volume_issue_count }) {
+    let comic, comicErr
+    if (comicvine_id) {
+      const res = await supabase.from('comics')
+        .upsert({ title, issue_number, publisher, cover_url, comicvine_id,
+                  description, deck, volume_id, volume_issue_count },
+                 { onConflict: 'comicvine_id', ignoreDuplicates: false })
+        .select().single()
+      comic = res.data; comicErr = res.error
+    } else {
+      const res = await supabase.from('comics')
+        .insert({ title, issue_number, publisher, cover_url, description, deck })
+        .select().single()
+      comic = res.data; comicErr = res.error
+    }
+    if (comicErr) return { error: comicErr.message }
+
+    const { data, error } = await supabase.from('collection')
+      .insert({ user_id: user.id, comic_id: comic.id, grade, paid_price, current_value, notes })
+      .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck)')
+      .single()
+    if (error) return { error: error.message }
+    setCollection(prev => [data, ...prev])
+    return { data }
   }
 
-  const unlockedIds = useMemo(() =>
-    new Set(userAchievements.map(ua => ua.achievement_id)),
-    [userAchievements]
-  )
+  async function updateComic(id, updates) {
+    const { data, error } = await supabase.from('collection')
+      .update(updates).eq('id', id).eq('user_id', user.id)
+      .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck)')
+      .single()
+    if (error) return { error: error.message }
+    setCollection(prev => prev.map(c => c.id === id ? data : c))
+    return { data }
+  }
 
-  const xp         = profile?.xp    || 0
-  const level      = profile?.level || 1
-  const xpInLevel  = xp % XP_PER_LEVEL
-  const xpProgress = (xpInLevel / XP_PER_LEVEL) * 100
+  async function removeComic(id) {
+    const { error } = await supabase.from('collection')
+      .delete().eq('id', id).eq('user_id', user.id)
+    if (error) return { error: error.message }
+    setCollection(prev => prev.filter(c => c.id !== id))
+    return {}
+  }
+
+  async function markRead(id) {
+    const now = new Date().toISOString()
+    const { data, error } = await supabase.from('collection')
+      .update({ read_at: now }).eq('id', id).eq('user_id', user.id)
+      .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck)')
+      .single()
+    if (!error) setCollection(prev => prev.map(c => c.id === id ? data : c))
+    return { error }
+  }
+
+  async function markUnread(id) {
+    const { data, error } = await supabase.from('collection')
+      .update({ read_at: null }).eq('id', id).eq('user_id', user.id)
+      .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck)')
+      .single()
+    if (!error) setCollection(prev => prev.map(c => c.id === id ? data : c))
+    return { error }
+  }
+
+  async function setReadingOrder(id, order) {
+    try {
+      const { data, error } = await supabase
+        .from('collection')
+        .update({ reading_order: order })
+        .eq('id', id)
+        .eq('user_id', user?.id)
+        .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck)')
+        .single()
+      if (error) return { error: error.message }
+      setCollection(prev => prev.map(c => c.id === id ? data : c))
+      return { data }
+    } catch (err) {
+      return { error: err.message }
+    }
+  }
 
   return (
-    <AchievementsContext.Provider value={{
-      achievements, userAchievements, unlockedIds,
-      loading, xp, level, xpInLevel, xpProgress,
-      awardXP, checkAchievement, refresh: fetch,
+    <CollectionContext.Provider value={{
+      collection, loading, error, stats, series,
+      addComic, updateComic, removeComic, markRead, markUnread, setReadingOrder,
+      refresh: fetch,
     }}>
       {children}
-    </AchievementsContext.Provider>
+    </CollectionContext.Provider>
   )
 }
 
-export const useAchievements = () => {
-  const ctx = useContext(AchievementsContext)
-  if (!ctx) return { achievements: [], userAchievements: [], unlockedIds: new Set(), loading: false, xp: 0, level: 1, xpInLevel: 0, xpProgress: 0, awardXP: async()=>{}, checkAchievement: async()=>{}, refresh: async()=>{} }
+export const useCollection = () => {
+  const ctx = useContext(CollectionContext)
+  if (!ctx) throw new Error('useCollection must be used within CollectionProvider')
   return ctx
 }

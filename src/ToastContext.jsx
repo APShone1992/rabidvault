@@ -191,6 +191,6 @@ export function CollectionProvider({ children }) {
 
 export const useCollection = () => {
   const ctx = useContext(CollectionContext)
-  if (!ctx) return { collection: [], loading: false, error: null, stats: { total: 0, totalValue: 0, totalSpent: 0, publishers: 0, read: 0, unread: 0 }, series: [], addComic: async()=>{}, updateComic: async()=>{}, removeComic: async()=>{}, markRead: async()=>{}, markUnread: async()=>{}, setReadingOrder: async()=>{}, refresh: async()=>{} }
+  if (!ctx) throw new Error('useCollection must be used within CollectionProvider')
   return ctx
 }

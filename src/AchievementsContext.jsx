@@ -1,102 +1,52 @@
-import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { createContext, useContext, useState, useCallback, useRef } from 'react'
 
-const AuthContext = createContext({})
+const ToastContext = createContext(null)
 
-export function AuthProvider({ children }) {
-  const [user, setUser]       = useState(null)
-  const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(true)
+export function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([])
+  const timers = useRef({})
 
-  useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      else setLoading(false)
-    }).catch(() => {
-      // Supabase unreachable - show login screen
-      setLoading(false)
-    })
-
-    // Listen for auth changes (SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        setUser(null)
-        setProfile(null)
-        setLoading(false)
-      } else if (session?.user) {
-        setUser(session.user)
-        // Only re-fetch profile on sign-in, not on every token refresh
-        if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-          fetchProfile(session.user.id)
-        } else {
-          setLoading(false)
-        }
-      }
-    })
-
-    return () => subscription.unsubscribe()
+  const dismiss = useCallback((id) => {
+    setToasts(prev => prev.map(t => t.id === id ? { ...t, leaving: true } : t))
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 300)
   }, [])
 
-  async function fetchProfile(userId) {
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
-      if (data) setProfile(data)
-    } catch (_) {
-      // Profile fetch failed - user still logged in
-    } finally {
-      setLoading(false)
-    }
-  }
+  const show = useCallback((message, type = 'info', duration = 3500) => {
+    const id = Date.now() + Math.random()
+    setToasts(prev => [...prev.slice(-4), { id, message, type, leaving: false }])
+    timers.current[id] = setTimeout(() => dismiss(id), duration)
+    return id
+  }, [dismiss])
 
-  async function signUp(email, password, username) {
-    try {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { username } }
-    })
-    return { data, error }
-  
-    } catch (err) {
-      return { data: null, error: { message: 'Connection error. Please check your internet and try again.' } }
-    }
-  }
+  const success = useCallback((msg, dur)  => show(msg, 'success', dur), [show])
+  const error   = useCallback((msg, dur)  => show(msg, 'error',   dur ?? 5000), [show])
+  const info    = useCallback((msg, dur)  => show(msg, 'info',    dur), [show])
+  const warning = useCallback((msg, dur)  => show(msg, 'warning', dur), [show])
 
-  async function signIn(email, password) {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-      return { data, error }
-    } catch (err) {
-      return { data: null, error: { message: 'Connection error. Please check your internet and try again.' } }
-    }
-  }
-
-  async function signOut() {
-    await supabase.auth.signOut()
-  }
-
-  async function updateProfile(updates) {
-    const { data, error } = await supabase
-      .from('profiles')
-      .update(updates)
-      .eq('id', user?.id)
-      .select()
-      .single()
-    if (!error) setProfile(data)
-    return { data, error }
-  }
+  const ICONS = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signOut, updateProfile }}>
+    <ToastContext.Provider value={{ show, success, error, info, warning, dismiss }}>
       {children}
-    </AuthContext.Provider>
+      <div className="toast-container">
+        {toasts.map(t => (
+          <div
+            key={t.id}
+            className={`toast toast-${t.type} ${t.leaving ? 'toast-out' : ''}`}
+            onClick={() => dismiss(t.id)}
+          >
+            <span style={{ fontSize: '1rem' }}>{ICONS[t.type]}</span>
+            <span style={{ flex: 1 }}>{t.message}</span>
+            <span style={{ opacity: 0.5, fontSize: '0.8rem', cursor: 'pointer' }}>✕</span>
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
   )
 }
 
-export const useAuth = () => useContext(AuthContext)
+export const useToast = () => {
+  const ctx = useContext(ToastContext)
+  if (!ctx) throw new Error('useToast must be used within ToastProvider')
+  return ctx
+}
