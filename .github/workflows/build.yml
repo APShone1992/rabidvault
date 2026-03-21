@@ -113,13 +113,15 @@ jobs:
           VITE_BASE_PATH:              /
         run: npm run build
 
-      - name: Sync Capacitor
-        run: npx cap sync android
+      - name: Sync Capacitor and install Android deps
+        run: |
+          npx cap sync android
+          cd android
+          npm install 2>/dev/null || true
 
       - name: Fix Gradle wrapper
         run: |
           cd android
-          # Install gradle to regenerate the wrapper jar properly
           curl -fsSL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
           /tmp/gradle-dist/gradle-8.7/bin/gradle wrapper --gradle-version 8.7
@@ -128,7 +130,7 @@ jobs:
       - name: Build debug APK
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
