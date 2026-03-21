@@ -279,27 +279,25 @@ export default function AddComic() {
             )}
       {searchResults.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: 320, overflowY: 'auto' }}>
-              {searchResults.map(r => (
-                {(() => {
-                  const alreadyOwned = findDuplicate(collection, r)
-                  return (
-                    <div key={r.comicvine_id} onClick={() => selectResult(r)}
-                      style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', padding: '0.75rem', background: alreadyOwned ? 'rgba(245,158,11,0.06)' : 'var(--bg3)', borderRadius: 8, cursor: 'pointer', border: `1px solid ${alreadyOwned ? 'rgba(245,158,11,0.4)' : 'var(--border)'}` }}>
-                      {r.cover_url && <img loading="lazy" src={r.cover_url} alt="" style={{ width: 40, height: 55, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{r.title} {r.issue_number}</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{r.publisher} · {r.publish_date}</div>
-                        {alreadyOwned && (
-                          <div style={{ fontSize: '0.72rem', color: '#fcd34d', fontWeight: 700, marginTop: '0.2rem' }}>
-                            ✓ In your collection — {alreadyOwned.grade} · £{Number(alreadyOwned.current_value || 0).toLocaleString()}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ marginLeft: 'auto', color: 'var(--purple-light)', fontSize: '0.8rem', fontWeight: 700, flexShrink: 0 }}>Select →</div>
+              {searchResults.map(r => {
+                const alreadyOwned = findDuplicate(collection, r)
+                return (
+                  <div key={r.comicvine_id} onClick={() => selectResult(r)}
+                    style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', padding: '0.75rem', background: alreadyOwned ? 'rgba(245,158,11,0.06)' : 'var(--bg3)', borderRadius: 8, cursor: 'pointer', border: `1px solid ${alreadyOwned ? 'rgba(245,158,11,0.4)' : 'var(--border)'}` }}>
+                    {r.cover_url && <img loading="lazy" src={r.cover_url} alt="" style={{ width: 40, height: 55, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{r.title} {r.issue_number}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{r.publisher} · {r.publish_date}</div>
+                      {alreadyOwned && (
+                        <div style={{ fontSize: '0.72rem', color: '#fcd34d', fontWeight: 700, marginTop: '0.2rem' }}>
+                          ✓ In your collection — {alreadyOwned.grade} · £{Number(alreadyOwned.current_value || 0).toLocaleString()}
+                        </div>
+                      )}
                     </div>
-                  )
-                })()}
-              ))}
+                    <div style={{ marginLeft: 'auto', color: 'var(--purple-light)', fontSize: '0.8rem', fontWeight: 700, flexShrink: 0 }}>Select →</div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
