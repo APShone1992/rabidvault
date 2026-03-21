@@ -1,0 +1,44 @@
+{
+  "name": "rabidvault",
+  "productName": "The Rabid Vault",
+  "private": true,
+  "version": "3.0.0",
+  "type": "module",
+  "description": "Track, value and discover your comic book collection",
+  "homepage": "https://YOUR_GITHUB_USERNAME.github.io/rabidvault",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist",
+    "cap:sync": "npm run build && npx cap sync",
+    "cap:android": "npm run cap:sync && npx cap open android",
+    "cap:ios": "npm run cap:sync && npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/camera": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/ios": "^6.0.0",
+    "@capacitor/keyboard": "^6.0.0",
+    "@capacitor/push-notifications": "^6.0.0",
+    "@capacitor/splash-screen": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
+    "chart.js": "^4.4.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "lucide-react": "^0.446.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "gh-pages": "^6.1.1",
+    "vite": "^5.4.2"
+  }
+}
