@@ -55,7 +55,7 @@ function AppInner() {
   if (loading) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg)' }}>
       <div style={{ textAlign:'center' }}>
-        <div style={{ fontSize:'3rem', marginBottom:'1rem' }}>🦝</div>
+<img src={`${import.meta.env.BASE_URL}logo.png`} alt="The Rabid Vault" style={{ width: 120, height: 120, objectFit: 'contain', marginBottom: '1rem' }} />
         <div style={{ fontFamily:'var(--font-display)', fontSize:'1.5rem', letterSpacing:'0.1em', color:'var(--text)' }}>LOADING...</div>
       </div>
     </div>
