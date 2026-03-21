@@ -34,7 +34,6 @@ export default function Analytics() {
   const [snapshots, setSnapshots] = useState([])
   const { user } = useAuth()
 
-  // Fetch weekly value snapshots for the trend chart
   useEffect(() => {
     if (!user) return
     supabase
@@ -78,32 +77,19 @@ export default function Analytics() {
     const values = months.map(m => byMonth[m])
 
     lineInst.current?.destroy()
-    // Weekly value trend from real snapshots
+
     if (trendRef.current && snapshots.length > 1) {
       if (trendInst.current) trendInst.current.destroy()
-      const labels = snapshots.map(s => new Date(s.recorded_at).toLocaleDateString('en-GB', { day:'numeric', month:'short' }))
-      const values = snapshots.map(s => Number(s.total_value || 0))
-      const spent  = snapshots.map(s => Number(s.total_spent || 0))
+      const tLabels = snapshots.map(s => new Date(s.recorded_at).toLocaleDateString('en-GB', { day:'numeric', month:'short' }))
+      const tValues = snapshots.map(s => Number(s.total_value || 0))
+      const tSpent  = snapshots.map(s => Number(s.total_spent || 0))
       trendInst.current = new Chart(trendRef.current, {
         type: 'line',
         data: {
-          labels,
+          labels: tLabels,
           datasets: [
-            {
-              label: 'Collection Value',
-              data: values,
-              borderColor: 'rgba(139,92,246,0.9)',
-              backgroundColor: 'rgba(139,92,246,0.1)',
-              fill: true, tension: 0.4, pointRadius: 3,
-            },
-            {
-              label: 'Total Spent',
-              data: spent,
-              borderColor: 'rgba(107,114,128,0.6)',
-              backgroundColor: 'transparent',
-              fill: false, tension: 0.4, pointRadius: 2,
-              borderDash: [4, 4],
-            },
+            { label: 'Collection Value', data: tValues, borderColor: 'rgba(139,92,246,0.9)', backgroundColor: 'rgba(139,92,246,0.1)', fill: true, tension: 0.4, pointRadius: 3 },
+            { label: 'Total Spent', data: tSpent, borderColor: 'rgba(107,114,128,0.6)', backgroundColor: 'transparent', fill: false, tension: 0.4, pointRadius: 2, borderDash: [4,4] },
           ],
         },
         options: {
@@ -165,7 +151,15 @@ export default function Analytics() {
     return () => { lineInst.current?.destroy(); pieInst.current?.destroy(); barInst.current?.destroy(); pubInst.current?.destroy() }
   }, [collection, loading, snapshots])
 
-  if (loading)
+  if (loading) return (
+    <div className="page-enter">
+      <h1 className="section-title" style={{ marginBottom: '1.5rem' }}>Analytics</h1>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+        {[...Array(4)].map((_, i) => <div key={i} className="skeleton" style={{ height: 100, borderRadius: 12 }} />)}
+      </div>
+      <div className="skeleton" style={{ height: 240, borderRadius: 12 }} />
+    </div>
+  )
 
   if (!collection || collection.length === 0) return (
     <div className="page-enter">
@@ -176,21 +170,12 @@ export default function Analytics() {
         <div className="empty-body">Add comics to your collection to see value charts and analytics here.</div>
       </div>
     </div>
-  ) return (
-    <div className="page-enter">
-      <h1 className="section-title" style={{ marginBottom: '1.5rem' }}>Analytics</h1>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-        {[...Array(4)].map((_, i) => <div key={i} className="skeleton" style={{ height: 100, borderRadius: 12 }} />)}
-      </div>
-      <div className="skeleton" style={{ height: 240, borderRadius: 12 }} />
-    </div>
   )
 
   return (
     <div className="page-enter">
       <h1 className="section-title" style={{ marginBottom: '1.5rem' }}>Analytics</h1>
 
-      {/* XP bar */}
       <div className="card card-glow" style={{ marginBottom: '1.5rem', background: 'linear-gradient(120deg,#16003a,#1a1a2e)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', letterSpacing: '0.08em' }}>Level {level} Collector</div>
@@ -204,7 +189,6 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Stats row */}
       <div className="stats-row" style={{ marginBottom: '1.5rem' }}>
         <div className="stat-card">
           <div className="stat-label">Total ROI</div>
@@ -230,20 +214,15 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Weekly value trend — only shows when snapshots exist */}
       {snapshots.length > 1 && (
         <div className="card" style={{ marginBottom: '1rem' }}>
-          <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, letterSpacing: '0.04em', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>Value trend — last {snapshots.length} weeks</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 400 }}>
-              {snapshots.length < 4 ? 'Updates weekly — check back for your trend' : ''}
-            </span>
+          <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+            Value trend — last {snapshots.length} weeks
           </div>
           <div style={{ position: 'relative', height: 180 }}><canvas ref={trendRef} /></div>
         </div>
       )}
 
-      {/* Charts grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
         <div className="card">
           <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, letterSpacing: '0.04em', marginBottom: '1rem' }}>Collection value over time</div>
@@ -278,7 +257,6 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Publisher bars */}
       {pubEntries.length > 0 && (
         <div className="card">
           <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, letterSpacing: '0.04em', marginBottom: '1rem' }}>Publisher breakdown</div>
