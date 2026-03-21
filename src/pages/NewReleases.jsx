@@ -103,7 +103,7 @@ export default function NewReleases() {
   const total = Object.values(filtered).reduce((s,a) => s+a.length, 0)
 
   return (
-    <div className="page-enter" className="nr-page">
+    <div className="page-enter nr-page">
       <div className="section-header" style={{ marginBottom:'0.5rem' }}>
         <h1 className="section-title">Upcoming Releases</h1>
         <div style={{ display:'flex', gap:'0.5rem', alignItems:'center' }}>
