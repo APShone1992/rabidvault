@@ -25,8 +25,8 @@ jobs:
         env:
           VITE_SUPABASE_URL:           ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY:      ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_COMICVINE_API_KEY:      ${{ secrets.VITE_COMICVINE_API_KEY }}
-          VITE_GOOGLE_VISION_API_KEY:  ${{ secrets.VITE_GOOGLE_VISION_API_KEY }}
+          VITE_COMICVINE_API_KEY:      ${{ secrets.COMICVINE_API_KEY }}
+          VITE_GOOGLE_VISION_API_KEY:  ${{ secrets.GOOGLE_VISION_API_KEY }}
           VITE_BASE_PATH:              ${{ secrets.VITE_BASE_PATH || '/rabidvault/' }}
         run: npm run build
 
@@ -77,8 +77,8 @@ jobs:
           supabase functions deploy price-alerts
           supabase functions deploy cgc-verify
           supabase functions deploy weekly-snapshot
-          supabase secrets set GOOGLE_VISION_API_KEY=${{ secrets.VITE_GOOGLE_VISION_API_KEY }}
-          supabase secrets set COMICVINE_API_KEY=${{ secrets.VITE_COMICVINE_API_KEY }}
+          supabase secrets set GOOGLE_VISION_API_KEY=${{ secrets.GOOGLE_VISION_API_KEY }}
+          supabase secrets set COMICVINE_API_KEY=${{ secrets.COMICVINE_API_KEY }}
 
   # ── 3. Build Android APK (free — no Google Play needed) ────────
   build-android:
@@ -110,11 +110,11 @@ jobs:
           RES="android/app/src/main/res"
           for DENSITY in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
             case $DENSITY in
-              mdpi)     SIZE=48  ;;
-              hdpi)     SIZE=72  ;;
-              xhdpi)    SIZE=96  ;;
-              xxhdpi)   SIZE=144 ;;
-              xxxhdpi)  SIZE=192 ;;
+              mdpi)    SIZE=48  ;;
+              hdpi)    SIZE=72  ;;
+              xhdpi)   SIZE=96  ;;
+              xxhdpi)  SIZE=144 ;;
+              xxxhdpi) SIZE=192 ;;
             esac
             mkdir -p "$RES/mipmap-$DENSITY"
             convert "$LOGO" -resize ${SIZE}x${SIZE} "$RES/mipmap-$DENSITY/ic_launcher.png"
@@ -128,21 +128,21 @@ jobs:
         env:
           VITE_SUPABASE_URL:           ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY:      ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_COMICVINE_API_KEY:      ${{ secrets.VITE_COMICVINE_API_KEY }}
-          VITE_GOOGLE_VISION_API_KEY:  ${{ secrets.VITE_GOOGLE_VISION_API_KEY }}
+          VITE_COMICVINE_API_KEY:      ${{ secrets.COMICVINE_API_KEY }}
+          VITE_GOOGLE_VISION_API_KEY:  ${{ secrets.GOOGLE_VISION_API_KEY }}
           VITE_BASE_PATH:              /
         run: npm run build
 
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Fix Gradle wrapper
+      - name: Download Gradle wrapper jar
         run: |
-          cd android
-          curl -fsSL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o /tmp/gradle.zip
+          mkdir -p android/gradle/wrapper
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.4-bin.zip -o /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
-          /tmp/gradle-dist/gradle-8.7/bin/gradle wrapper --gradle-version 8.7
-          chmod +x gradlew
+          /tmp/gradle-dist/gradle-8.4/bin/gradle wrapper --gradle-version 8.4 --project-dir android
+          chmod +x android/gradlew
 
       - name: Build debug APK
         run: |
