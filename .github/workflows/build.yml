@@ -16,7 +16,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm install
@@ -87,7 +86,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -156,7 +154,7 @@ jobs:
             ## 🦝 The Rabid Vault — Latest Build
 
             ### 📱 Android App
-            Download **TheRabidVault.apk** below and install it on your Android phone.
+            Download **TheRabidVault.apk** below and install on your Android phone.
 
             ### 🌐 Web App
             - **Web app:** https://${{ github.repository_owner }}.github.io/rabidvault
