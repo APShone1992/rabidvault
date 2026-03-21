@@ -116,16 +116,14 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Download Gradle wrapper jar
+      - name: Fix Gradle wrapper
         run: |
-          mkdir -p android/gradle/wrapper
-          curl -fsSL https://github.com/gradle/gradle/raw/v8.7.0/gradle/wrapper/gradle-wrapper.jar \
-            -o android/gradle/wrapper/gradle-wrapper.jar
-
-      - name: Make Gradle executable
-        run: |
-          chmod +x android/gradlew
-          git config core.fileMode false
+          cd android
+          # Install gradle to regenerate the wrapper jar properly
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
+          /tmp/gradle-dist/gradle-8.7/bin/gradle wrapper --gradle-version 8.7
+          chmod +x gradlew
 
       - name: Build debug APK
         run: |
