@@ -52,11 +52,13 @@ export function norm(raw) {
 export async function fetchUpcomingReleases(monthsAhead = 4) {
   try {
     const today  = new Date()
+    // Start from beginning of current month — ComicVine uses 1st of month for cover_date
+    const start  = new Date(today.getFullYear(), today.getMonth(), 1)
     const future = new Date(today)
     future.setMonth(future.getMonth() + monthsAhead)
 
     const data = await cv('issues', {
-      filter:     `cover_date:${fmt(today)}|${fmt(future)}`,
+      filter:     `cover_date:${fmt(start)}|${fmt(future)}`,
       field_list: 'id,name,issue_number,cover_date,image,volume,associated_images',
       sort:       'cover_date:asc',
       limit:      100,
