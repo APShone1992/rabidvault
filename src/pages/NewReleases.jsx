@@ -65,13 +65,19 @@ export default function NewReleases() {
     setLoading(true); setError('')
     try {
       const data = await fetchUpcomingReleases(monthsAhead)
-      // Normalise publisher names and ensure covers are proxied
-      const normalised = data.map(issue => ({
-        ...issue,
-        publisher: normalisePublisher(issue.publisher),
-        cover_url: ensureProxied(issue.cover_url),
-      }))
-      setGrouped(groupByWeek(normalised))
+      if (!data || data.length === 0) {
+        // API returned nothing - show demo data with a warning
+        setError('ComicVine returned no results. Check your API key is set in Supabase edge function secrets. Showing demo data.')
+        setGrouped(DEMO)
+      } else {
+        // Normalise publisher names and ensure covers are proxied
+        const normalised = data.map(issue => ({
+          ...issue,
+          publisher: normalisePublisher(issue.publisher),
+          cover_url: ensureProxied(issue.cover_url),
+        }))
+        setGrouped(groupByWeek(normalised))
+      }
     } catch (err) {
       setError('Could not reach ComicVine. Showing demo data.')
       setGrouped(DEMO)
