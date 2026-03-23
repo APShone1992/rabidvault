@@ -2,14 +2,13 @@
 // Deploy: supabase functions deploy vision-proxy
 // Secret: supabase secrets set GOOGLE_VISION_API_KEY=your_key
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   try {
