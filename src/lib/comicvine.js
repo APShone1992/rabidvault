@@ -2,98 +2,93 @@
 // Free tier: 200 requests/hour
 // All requests are proxied through a Supabase Edge Function to hide your API key
 
-const PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/comicvine-proxy`
-
-// ComicVine images load fine directly in <img> tags — only fetch() API calls need proxying
-// Browsers can load cross-origin images without CORS restrictions
-function proxyImage(url) {
-  if (!url) return ''
-  return url
-}
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const ANON_KEY     = import.meta.env.VITE_SUPABASE_ANON_KEY
+const PROXY_URL    = `${SUPABASE_URL}/functions/v1/comicvine-proxy`
 
 async function cvFetch(endpoint, params = {}) {
+  if (!SUPABASE_URL || SUPABASE_URL === 'undefined') {
+    throw new Error('VITE_SUPABASE_URL is not set — check your GitHub secrets')
+  }
+
   const url = new URL(PROXY_URL)
   url.searchParams.set('endpoint', endpoint)
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
 
   const res = await fetch(url.toString(), {
     headers: {
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      Authorization: `Bearer ${ANON_KEY}`,
     },
   })
   if (!res.ok) throw new Error(`ComicVine proxy error: ${res.status}`)
-  return res.json()
+  const data = await res.json()
+  if (data.error) throw new Error(data.error)
+  return data
 }
 
-// Search comics by title
 export async function searchComics(query) {
   try {
-  const data = await cvFetch('search', {
-    query,
-    resources: 'issue',
-    field_list: 'id,name,issue_number,volume,image,cover_date,description,deck',
-    limit: 10,
-  })
-  return (data.results || []).map(normaliseIssue)
+    const data = await cvFetch('search', {
+      query,
+      resources:  'issue',
+      field_list: 'id,name,issue_number,volume,image,cover_date,description,deck',
+      limit:      10,
+    })
+    return (data.results || []).map(normaliseIssue)
   } catch (err) {
-    console.warn("[comicvine]", err?.message)
+    console.warn('[comicvine]', err?.message)
     return []
   }
 }
 
-// Get a single issue by ComicVine ID
 export async function getIssue(comicvineId) {
   try {
-  const data = await cvFetch(`issue/4000-${comicvineId}`, {
-    field_list: 'id,name,issue_number,volume,image,cover_date,description,deck,character_credits',
-  })
-  return data.results ? normaliseIssue(data.results) : null
+    const data = await cvFetch(`issue/4000-${comicvineId}`, {
+      field_list: 'id,name,issue_number,volume,image,cover_date,description,deck,character_credits',
+    })
+    return data.results ? normaliseIssue(data.results) : null
   } catch (err) {
-    console.warn("[comicvine]", err?.message)
+    console.warn('[comicvine]', err?.message)
     return null
   }
 }
 
-// Get issues in a volume (series)
 export async function getVolume(volumeId) {
   try {
-  const data = await cvFetch(`volume/4050-${volumeId}`, {
-    field_list: 'id,name,publisher,issues,image,description',
-  })
-  return data.results || null
+    const data = await cvFetch(`volume/4050-${volumeId}`, {
+      field_list: 'id,name,publisher,issues,image,description',
+    })
+    return data.results || null
   } catch (err) {
-    console.warn("[comicvine]", err?.message)
+    console.warn('[comicvine]', err?.message)
     return null
   }
 }
 
-// Fetch price history from our own Supabase price_history table
 export async function getPriceHistory(comicId) {
   try {
-  const { supabase } = await import('./supabase')
-  const { data } = await supabase
-    .from('price_history')
-    .select('price, grade, recorded_at, source')
-    .eq('comic_id', comicId)
-    .order('recorded_at', { ascending: true })
-    .limit(24)
-  return data || []
+    const { supabase } = await import('./supabase')
+    const { data } = await supabase
+      .from('price_history')
+      .select('price, grade, recorded_at, source')
+      .eq('comic_id', comicId)
+      .order('recorded_at', { ascending: true })
+      .limit(24)
+    return data || []
   } catch (err) {
-    console.warn("[comicvine]", err?.message)
+    console.warn('[comicvine]', err?.message)
     return []
   }
 }
 
-// Record a new price snapshot (called when user updates value)
 export async function recordPriceSnapshot(comicId, grade, price) {
   try {
-  const { supabase } = await import('./supabase')
-  await supabase
-    .from('price_history')
-    .insert({ comic_id: comicId, grade, price, source: 'user' })
+    const { supabase } = await import('./supabase')
+    await supabase
+      .from('price_history')
+      .insert({ comic_id: comicId, grade, price, source: 'user' })
   } catch (err) {
-    console.warn("[comicvine]", err?.message)
-    return null
+    console.warn('[comicvine]', err?.message)
   }
 }
 
@@ -113,10 +108,10 @@ function stripHtml(html = '') {
 function normaliseIssue(raw) {
   return {
     comicvine_id:        String(raw.id),
-    title:               raw.volume?.name || raw.name,
+    title:               raw.volume?.name || raw.name || '',
     issue_number:        raw.issue_number ? `#${raw.issue_number}` : '',
     publisher:           raw.volume?.publisher?.name || '',
-    cover_url:           proxyImage(raw.image?.medium_url || raw.image?.original_url || ''),
+    cover_url:           raw.image?.medium_url || raw.image?.original_url || '',
     description:         stripHtml(raw.description || ''),
     deck:                raw.deck || '',
     publish_date:        raw.cover_date || '',
@@ -126,23 +121,12 @@ function normaliseIssue(raw) {
   }
 }
 
-
-// ── eBay search URL builder ────────────────────────────────────
-// Opens an eBay search for the exact comic with grade filter
 export function buildEbayUrl(title, issueNumber, grade) {
-  // Build a focused search query
   const gradeKeyword = gradeToEbayKeyword(grade)
-  const query = [title, issueNumber, gradeKeyword, 'comic']
-    .filter(Boolean)
-    .join(' ')
-    .trim()
-  const encoded = encodeURIComponent(query)
-  // Use eBay's completed listings for real sold prices, or active for current
-  return `https://www.ebay.co.uk/sch/i.html?_nkw=${encoded}&_sacat=259104&LH_Sold=1&LH_Complete=1`
-  // Category 259104 = Comics & Graphic Novels on eBay UK
+  const query = [title, issueNumber, gradeKeyword, 'comic'].filter(Boolean).join(' ').trim()
+  return `https://www.ebay.co.uk/sch/i.html?_nkw=${encodeURIComponent(query)}&_sacat=259104&LH_Sold=1&LH_Complete=1`
 }
 
-// Also export an active listings URL (what's for sale right now)
 export function buildEbayActiveUrl(title, issueNumber, grade) {
   const gradeKeyword = gradeToEbayKeyword(grade)
   const query = [title, issueNumber, gradeKeyword, 'comic'].filter(Boolean).join(' ').trim()
