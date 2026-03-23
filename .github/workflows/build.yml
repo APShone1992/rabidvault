@@ -77,10 +77,10 @@ jobs:
           supabase functions deploy price-alerts
           supabase functions deploy cgc-verify
           supabase functions deploy weekly-snapshot
-          supabase secrets set GOOGLE_VISION_API_KEY=${{ secrets.GOOGLE_VISION_API_KEY }}
           supabase secrets set COMICVINE_API_KEY=${{ secrets.COMICVINE_API_KEY }}
+          supabase secrets set GOOGLE_VISION_API_KEY=${{ secrets.GOOGLE_VISION_API_KEY }}
 
-  # ── 3. Build Android APK (free — no Google Play needed) ────────
+  # ── 3. Build Android APK ───────────────────────────────────────
   build-android:
     needs: build-web
     runs-on: ubuntu-latest
@@ -136,9 +136,9 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Download Gradle wrapper jar
+      - name: Fix Gradle wrapper
         run: |
-          mkdir -p android/gradle/wrapper
+          cd android
           curl -fsSL https://services.gradle.org/distributions/gradle-8.4-bin.zip -o /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
           /tmp/gradle-dist/gradle-8.4/bin/gradle wrapper --gradle-version 8.4 --project-dir android
@@ -156,7 +156,7 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-  # ── 4. Create a Release with download links ────────────────────
+  # ── 4. Create a Release ────────────────────────────────────────
   release:
     needs: [build-web, build-android]
     runs-on: ubuntu-latest
@@ -186,23 +186,13 @@ jobs:
             ### 📱 Android App
             Download **TheRabidVault.apk** below and install it on any Android phone.
 
-            **How to install the APK:**
+            **How to install:**
             1. Download TheRabidVault.apk to your Android phone
-            2. Open your phone's Settings → Security
-            3. Enable "Install from unknown sources" (or "Allow from this source")
-            4. Open the downloaded APK file and tap Install
-            5. Done!
+            2. Settings → Security → Enable "Install from unknown sources"
+            3. Open the APK and tap Install
 
             ### 🌐 Web App
-            - **Web app:** https://${{ github.repository_owner }}.github.io/rabidvault
-            - **Download page:** https://${{ github.repository_owner }}.github.io/rabidvault/download.html
-
-            ### What's included
-            - Full comic collection tracking
-            - Live ComicVine prices and upcoming releases
-            - Barcode + cover scanning
-            - Friends and collection comparison
-            - Achievements and XP system
+            - https://${{ github.repository_owner }}.github.io/rabidvault
           files: ./release-files/TheRabidVault.apk
           draft: false
           prerelease: false
