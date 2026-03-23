@@ -79,20 +79,11 @@ export default function Collection() {
       )].sort()
     : allSeries
 
-  // Load price history + full description when comic selected
+  // Load price history when comic selected
+  // Description and deck now come directly from the collection query
   useEffect(() => {
     if (!selected) { setComicDetail(null); return }
     getPriceHistory(selected.comic_id).then(setPriceHistory).catch(() => {})
-    const fetchDetail = async () => {
-      try {
-        const { data } = await supabase.from('comics')
-          .select('description, deck')
-          .eq('id', selected.comic_id)
-          .single()
-        setComicDetail(data)
-      } catch (_) { /* description unavailable */ }
-    }
-    fetchDetail()
   }, [selected?.comic_id])
 
   // Draw chart
@@ -444,7 +435,12 @@ export default function Collection() {
             style={{ position:'absolute', top:'1rem', right:'1rem', background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:'50%', width:28, height:28, cursor:'pointer', color:'var(--muted)', display:'flex', alignItems:'center', justifyContent:'center' }}><IconClose size={13} /></button>
 
           {selected.comics?.cover_url && (
-            <img loading="lazy" src={selected.comics.cover_url} alt="" style={{ width:'100%', borderRadius:10, marginBottom:'1rem', objectFit:'cover', maxHeight:220 }} />
+            <img loading="lazy"
+              src={selected.comics.cover_url.startsWith('http') && !selected.comics.cover_url.includes('comicvine-proxy')
+                ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/comicvine-proxy?image=${encodeURIComponent(selected.comics.cover_url)}`
+                : selected.comics.cover_url}
+              alt="" style={{ width:'100%', borderRadius:10, marginBottom:'1rem', objectFit:'cover', maxHeight:220 }}
+              onError={e => e.target.style.display='none'} />
           )}
           <div style={{ fontFamily:'var(--font-ui)', fontWeight:800, fontSize:'1rem', marginBottom:'0.2rem' }}>{selected.comics?.title} {selected.comics?.issue_number}</div>
           <div style={{ color:'var(--muted)', fontSize:'0.85rem', marginBottom:(selected.comics?.deck || selected.comics?.description) ? '0.65rem' : '1rem' }}>{selected.comics?.publisher}</div>
@@ -512,4 +508,3 @@ export default function Collection() {
     </div>
   )
 }
-
