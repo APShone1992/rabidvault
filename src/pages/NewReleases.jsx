@@ -4,34 +4,46 @@ import { buildEbayActiveUrl } from '../lib/comicvine'
 import { useWishlist } from '../hooks/useWishlist'
 import './NewReleases.css'
 
-const PUBLISHERS = ['All', 'Marvel', 'DC Comics', 'Image Comics', 'Dark Horse', 'IDW', 'BOOM! Studios']
-const FALLBACK = { Marvel: '🕷️', 'DC Comics': '🦇', 'Image Comics': '🚀', Default: '📖' }
+const PUBLISHERS = ['All', 'Marvel', 'DC', 'Image', 'Dark Horse', 'IDW', 'BOOM!']
+
+// Map various publisher name formats from ComicVine to our tab labels
+function normalisePublisher(pub) {
+  if (!pub) return 'Other'
+  const p = pub.toLowerCase()
+  if (p.includes('marvel'))     return 'Marvel'
+  if (p.includes('dc ') || p === 'dc' || p.includes('dc comics')) return 'DC'
+  if (p.includes('image'))      return 'Image'
+  if (p.includes('dark horse')) return 'Dark Horse'
+  if (p.includes('idw'))        return 'IDW'
+  if (p.includes('boom'))       return 'BOOM!'
+  return pub
+}
+
+const FALLBACK = { Marvel: '🕷️', DC: '🦇', Image: '🚀', Default: '📖' }
+
+const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/comicvine-proxy`
+
+// Ensure any cover URL goes through the image proxy
+function ensureProxied(url) {
+  if (!url) return ''
+  if (url.includes('/comicvine-proxy?image=')) return url // already proxied
+  return `${PROXY_BASE}?image=${encodeURIComponent(url)}`
+}
 
 const DEMO = {
   '2026-03-26': [
     { comicvine_id:'d1', title:'Ultimate Spider-Man', issue_number:'#14', publisher:'Marvel', cover_url:'', releaseDate:'2026-03-26', hasVariants:true, variantCount:4 },
-    { comicvine_id:'d2', title:'Batman', issue_number:'#155', publisher:'DC Comics', cover_url:'', releaseDate:'2026-03-26', hasVariants:true, variantCount:3 },
-    { comicvine_id:'d3', title:'Invincible', issue_number:'#151', publisher:'Image Comics', cover_url:'', releaseDate:'2026-03-26', hasVariants:false, variantCount:0 },
+    { comicvine_id:'d2', title:'Batman', issue_number:'#155', publisher:'DC', cover_url:'', releaseDate:'2026-03-26', hasVariants:true, variantCount:3 },
+    { comicvine_id:'d3', title:'Invincible', issue_number:'#151', publisher:'Image', cover_url:'', releaseDate:'2026-03-26', hasVariants:false, variantCount:0 },
     { comicvine_id:'d4', title:'X-Men', issue_number:'#25', publisher:'Marvel', cover_url:'', releaseDate:'2026-03-26', hasVariants:true, variantCount:5 },
-    { comicvine_id:'d5', title:'Saga', issue_number:'#70', publisher:'Image Comics', cover_url:'', releaseDate:'2026-03-26', hasVariants:false, variantCount:0 },
+    { comicvine_id:'d5', title:'Saga', issue_number:'#70', publisher:'Image', cover_url:'', releaseDate:'2026-03-26', hasVariants:false, variantCount:0 },
     { comicvine_id:'d6', title:'Thor', issue_number:'#34', publisher:'Marvel', cover_url:'', releaseDate:'2026-03-26', hasVariants:true, variantCount:3 },
   ],
   '2026-04-02': [
     { comicvine_id:'d7', title:'Daredevil', issue_number:'#8', publisher:'Marvel', cover_url:'', releaseDate:'2026-04-02', hasVariants:true, variantCount:2 },
-    { comicvine_id:'d8', title:'Detective Comics', issue_number:'#1085', publisher:'DC Comics', cover_url:'', releaseDate:'2026-04-02', hasVariants:true, variantCount:3 },
-    { comicvine_id:'d9', title:'The Walking Dead Deluxe', issue_number:'#88', publisher:'Image Comics', cover_url:'', releaseDate:'2026-04-02', hasVariants:false, variantCount:0 },
+    { comicvine_id:'d8', title:'Detective Comics', issue_number:'#1085', publisher:'DC', cover_url:'', releaseDate:'2026-04-02', hasVariants:true, variantCount:3 },
+    { comicvine_id:'d9', title:'The Walking Dead Deluxe', issue_number:'#88', publisher:'Image', cover_url:'', releaseDate:'2026-04-02', hasVariants:false, variantCount:0 },
     { comicvine_id:'d10', title:'Wolverine', issue_number:'#12', publisher:'Marvel', cover_url:'', releaseDate:'2026-04-02', hasVariants:true, variantCount:6 },
-  ],
-  '2026-04-09': [
-    { comicvine_id:'d11', title:'Spawn', issue_number:'#360', publisher:'Image Comics', cover_url:'', releaseDate:'2026-04-09', hasVariants:false, variantCount:0 },
-    { comicvine_id:'d12', title:'Wonder Woman', issue_number:'#18', publisher:'DC Comics', cover_url:'', releaseDate:'2026-04-09', hasVariants:true, variantCount:2 },
-    { comicvine_id:'d13', title:'Avengers', issue_number:'#22', publisher:'Marvel', cover_url:'', releaseDate:'2026-04-09', hasVariants:true, variantCount:4 },
-    { comicvine_id:'d14', title:'Hellboy', issue_number:'#5', publisher:'Dark Horse', cover_url:'', releaseDate:'2026-04-09', hasVariants:false, variantCount:0 },
-  ],
-  '2026-04-16': [
-    { comicvine_id:'d15', title:'Amazing Spider-Man', issue_number:'#58', publisher:'Marvel', cover_url:'', releaseDate:'2026-04-16', hasVariants:true, variantCount:5 },
-    { comicvine_id:'d16', title:'Superman', issue_number:'#24', publisher:'DC Comics', cover_url:'', releaseDate:'2026-04-16', hasVariants:true, variantCount:2 },
-    { comicvine_id:'d17', title:'Black Panther', issue_number:'#9', publisher:'Marvel', cover_url:'', releaseDate:'2026-04-16', hasVariants:false, variantCount:0 },
   ],
 }
 
@@ -53,9 +65,15 @@ export default function NewReleases() {
     setLoading(true); setError('')
     try {
       const data = await fetchUpcomingReleases(monthsAhead)
-      setGrouped(groupByWeek(data))
+      // Normalise publisher names and ensure covers are proxied
+      const normalised = data.map(issue => ({
+        ...issue,
+        publisher: normalisePublisher(issue.publisher),
+        cover_url: ensureProxied(issue.cover_url),
+      }))
+      setGrouped(groupByWeek(normalised))
     } catch (err) {
-      setError('Could not reach ComicVine. Showing demo data — add your API key to .env.local')
+      setError('Could not reach ComicVine. Showing demo data.')
       setGrouped(DEMO)
     }
     setLoading(false)
@@ -67,10 +85,31 @@ export default function NewReleases() {
     setSelected(issue); setVariantData(null); setActiveCover(null); setVLoad(true)
     try {
       const d = await fetchVariants(issue.comicvine_id)
-      setVariantData(d)
-      setActiveCover(d?.covers?.[0] || null)
+      if (d) {
+        // Ensure all cover URLs in variant data are proxied
+        const proxiedCovers = (d.covers || []).map(c => ({
+          ...c,
+          url:   ensureProxied(c.url),
+          thumb: ensureProxied(c.thumb),
+        }))
+        const proxiedData = { ...d, covers: proxiedCovers }
+        setVariantData(proxiedData)
+        setActiveCover(proxiedData.covers?.[0] || null)
+      } else {
+        const fallback = {
+          ...issue,
+          covers: [{ id:'main', label:'Main Cover', url: ensureProxied(issue.cover_url), thumb: ensureProxied(issue.cover_url), isMain:true }],
+          characters:[], storyArcs:[], description:'',
+        }
+        setVariantData(fallback)
+        setActiveCover(fallback.covers[0])
+      }
     } catch {
-      const fallback = { ...issue, covers:[{ id:'main', label:'Main Cover', url:issue.cover_url, thumb:issue.cover_url, isMain:true }], characters:[], storyArcs:[], description:'' }
+      const fallback = {
+        ...issue,
+        covers: [{ id:'main', label:'Main Cover', url: ensureProxied(issue.cover_url), thumb: ensureProxied(issue.cover_url), isMain:true }],
+        characters:[], storyArcs:[], description:'',
+      }
       setVariantData(fallback)
       setActiveCover(fallback.covers[0])
     }
@@ -84,6 +123,7 @@ export default function NewReleases() {
       title:        `${issue.title} ${issue.issue_number}${label !== 'Main Cover' ? ` [${label}]` : ''}`,
       issue_number: issue.issue_number,
       publisher:    issue.publisher,
+      cover_url:    ensureProxied(cover?.url || issue.cover_url),
       notes:        `Upcoming ${new Date(issue.releaseDate).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})} · ${label}`,
       priority:     'Medium',
       target_price: 0,
@@ -192,7 +232,7 @@ export default function NewReleases() {
                       <button
                         className={`btn btn-sm ${added[`${issue.comicvine_id}-Main Cover`]?'nr-added':'btn-outline'}`}
                         style={{ fontSize:'0.62rem', padding:'0.18rem 0.5rem' }}
-                        onClick={e => { e.stopPropagation(); handleAdd(issue, {label:'Main Cover'}) }}
+                        onClick={e => { e.stopPropagation(); handleAdd(issue, {label:'Main Cover', url:issue.cover_url}) }}
                       >{added[`${issue.comicvine_id}-Main Cover`]?'✓':'+ Wishlist'}</button>
                     </div>
                   </div>
@@ -300,7 +340,7 @@ export default function NewReleases() {
                 </div>
 
                 <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem', maxHeight:260, overflowY:'auto' }}>
-                  {(variantData?.covers || [{ id:'main', label:'Main Cover', url:selected.cover_url, thumb:selected.cover_url, isMain:true }]).map(cover => {
+                  {(variantData?.covers || [{ id:'main', label:'Main Cover', url: ensureProxied(selected.cover_url), thumb: ensureProxied(selected.cover_url), isMain:true }]).map(cover => {
                     const key = `${selected.comicvine_id}-${cover.label}`
                     return (
                       <div key={cover.id} style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.65rem 0.8rem', background:'var(--bg3)', borderRadius:8, border:'1px solid var(--border)' }}>
