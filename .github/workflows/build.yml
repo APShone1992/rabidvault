@@ -17,6 +17,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm install
@@ -25,8 +26,8 @@ jobs:
         env:
           VITE_SUPABASE_URL:           ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY:      ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_COMICVINE_API_KEY:      ${{ secrets.COMICVINE_API_KEY }}
-          VITE_GOOGLE_VISION_API_KEY:  ${{ secrets.GOOGLE_VISION_API_KEY }}
+          VITE_COMICVINE_API_KEY:      ${{ secrets.VITE_COMICVINE_API_KEY }}
+          VITE_GOOGLE_VISION_API_KEY:  ${{ secrets.VITE_GOOGLE_VISION_API_KEY }}
           VITE_BASE_PATH:              ${{ secrets.VITE_BASE_PATH || '/rabidvault/' }}
         run: npm run build
 
@@ -55,6 +56,8 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
+          force_orphan: true
+          enable_jekyll: false
 
   # ── 5. Deploy all Supabase Edge Functions ─────────────────────
   deploy-functions:
@@ -77,10 +80,10 @@ jobs:
           supabase functions deploy price-alerts
           supabase functions deploy cgc-verify
           supabase functions deploy weekly-snapshot
-          supabase secrets set COMICVINE_API_KEY=${{ secrets.COMICVINE_API_KEY }}
-          supabase secrets set GOOGLE_VISION_API_KEY=${{ secrets.GOOGLE_VISION_API_KEY }}
+          supabase secrets set GOOGLE_VISION_API_KEY=${{ secrets.VITE_GOOGLE_VISION_API_KEY }}
+          supabase secrets set COMICVINE_API_KEY=${{ secrets.VITE_COMICVINE_API_KEY }}
 
-  # ── 3. Build Android APK ───────────────────────────────────────
+  # ── 3. Build Android APK (free — no Google Play needed) ────────
   build-android:
     needs: build-web
     runs-on: ubuntu-latest
@@ -91,6 +94,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -101,26 +105,6 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install imagemagick for icon generation
-        run: sudo apt-get install -y imagemagick
-
-      - name: Generate Android app icons from logo.png
-        run: |
-          LOGO="public/logo.png"
-          RES="android/app/src/main/res"
-          for DENSITY in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-            case $DENSITY in
-              mdpi)    SIZE=48  ;;
-              hdpi)    SIZE=72  ;;
-              xhdpi)   SIZE=96  ;;
-              xxhdpi)  SIZE=144 ;;
-              xxxhdpi) SIZE=192 ;;
-            esac
-            mkdir -p "$RES/mipmap-$DENSITY"
-            convert "$LOGO" -resize ${SIZE}x${SIZE} "$RES/mipmap-$DENSITY/ic_launcher.png"
-            cp "$RES/mipmap-$DENSITY/ic_launcher.png" "$RES/mipmap-$DENSITY/ic_launcher_round.png"
-          done
-
       - name: Install dependencies
         run: npm install
 
@@ -128,21 +112,18 @@ jobs:
         env:
           VITE_SUPABASE_URL:           ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY:      ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_COMICVINE_API_KEY:      ${{ secrets.COMICVINE_API_KEY }}
-          VITE_GOOGLE_VISION_API_KEY:  ${{ secrets.GOOGLE_VISION_API_KEY }}
+          VITE_COMICVINE_API_KEY:      ${{ secrets.VITE_COMICVINE_API_KEY }}
+          VITE_GOOGLE_VISION_API_KEY:  ${{ secrets.VITE_GOOGLE_VISION_API_KEY }}
           VITE_BASE_PATH:              /
         run: npm run build
 
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Fix Gradle wrapper
+      - name: Make Gradle executable
         run: |
-          cd android
-          curl -fsSL https://services.gradle.org/distributions/gradle-8.4-bin.zip -o /tmp/gradle.zip
-          unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
-          /tmp/gradle-dist/gradle-8.4/bin/gradle wrapper --gradle-version 8.4
-          chmod +x gradlew
+          chmod +x android/gradlew
+          git config core.fileMode false
 
       - name: Build debug APK
         run: |
@@ -156,7 +137,7 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-  # ── 4. Create a Release ────────────────────────────────────────
+  # ── 4. Create a Release with download links ────────────────────
   release:
     needs: [build-web, build-android]
     runs-on: ubuntu-latest
@@ -186,13 +167,23 @@ jobs:
             ### 📱 Android App
             Download **TheRabidVault.apk** below and install it on any Android phone.
 
-            **How to install:**
+            **How to install the APK:**
             1. Download TheRabidVault.apk to your Android phone
-            2. Settings → Security → Enable "Install from unknown sources"
-            3. Open the APK and tap Install
+            2. Open your phone's Settings → Security
+            3. Enable "Install from unknown sources" (or "Allow from this source")
+            4. Open the downloaded APK file and tap Install
+            5. Done!
 
             ### 🌐 Web App
-            - https://${{ github.repository_owner }}.github.io/rabidvault
+            - **Web app:** https://${{ github.repository_owner }}.github.io/rabidvault
+            - **Download page:** https://${{ github.repository_owner }}.github.io/rabidvault/download.html
+
+            ### What's included
+            - Full comic collection tracking
+            - Live ComicVine prices and upcoming releases
+            - Barcode + cover scanning
+            - Friends and collection comparison
+            - Achievements and XP system
           files: ./release-files/TheRabidVault.apk
           draft: false
           prerelease: false
