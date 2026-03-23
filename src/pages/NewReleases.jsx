@@ -23,11 +23,18 @@ const FALLBACK = { Marvel: '🕷️', DC: '🦇', Image: '🚀', Default: '📖'
 
 const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/comicvine-proxy`
 
-// Ensure any cover URL goes through the image proxy
+// ComicVine images load fine directly in <img> tags
+// CORS only affects fetch() API calls, not image src attributes
 function ensureProxied(url) {
   if (!url) return ''
-  if (url.includes('/comicvine-proxy?image=')) return url // already proxied
-  return `${PROXY_BASE}?image=${encodeURIComponent(url)}`
+  // Strip any previously added proxy wrapper and return direct URL
+  if (url.includes('comicvine-proxy?image=')) {
+    try {
+      const inner = url.split('comicvine-proxy?image=')[1]
+      return decodeURIComponent(inner)
+    } catch { return url }
+  }
+  return url
 }
 
 const DEMO = {
@@ -259,9 +266,18 @@ export default function NewReleases() {
               <div className="nr-modal-left">
                 <div className="nr-modal-cover-main">
                   {variantLoading ? (
-                    <div className="nr-modal-loading"><div className="nr-spin" /><div style={{ fontSize:'0.82rem', color:'var(--muted)', marginTop:'0.75rem' }}>Loading covers…</div></div>
+                    activeCover?.url || selected.cover_url ? (
+                      <img loading="lazy"
+                        src={activeCover?.url || selected.cover_url}
+                        alt={selected.title}
+                        style={{ width:'100%', height:'100%', objectFit:'contain', borderRadius:8, opacity:0.6 }} />
+                    ) : (
+                      <div className="nr-modal-loading"><div className="nr-spin" /><div style={{ fontSize:'0.82rem', color:'var(--muted)', marginTop:'0.75rem' }}>Loading covers…</div></div>
+                    )
                   ) : activeCover?.url ? (
                     <img loading="lazy" src={activeCover.url} alt={activeCover.label} style={{ width:'100%', height:'100%', objectFit:'contain', borderRadius:8 }} />
+                  ) : selected.cover_url ? (
+                    <img loading="lazy" src={selected.cover_url} alt={selected.title} style={{ width:'100%', height:'100%', objectFit:'contain', borderRadius:8 }} />
                   ) : (
                     <div style={{ fontSize:'5rem', display:'flex', alignItems:'center', justifyContent:'center', height:'100%' }}>
                       {FALLBACK[selected.publisher] || FALLBACK.Default}
@@ -308,11 +324,18 @@ export default function NewReleases() {
                   )}
                 </div>
 
-                {variantData?.description ? (
+                {/* Show description from variantData or a loading state */}
+                {variantLoading ? (
+                  <div style={{ fontSize:'0.82rem', color:'var(--muted)', marginBottom:'1.25rem' }}>Loading details…</div>
+                ) : variantData?.description ? (
                   <p style={{ fontSize:'0.83rem', color:'var(--muted)', lineHeight:1.65, marginBottom:'1.25rem' }}>
                     {variantData.description}
                   </p>
-                ) : null}
+                ) : (
+                  <p style={{ fontSize:'0.83rem', color:'var(--muted)', lineHeight:1.65, marginBottom:'1.25rem', fontStyle:'italic' }}>
+                    No summary available for this issue.
+                  </p>
+                )}
 
                 {variantData?.characters?.length > 0 && (
                   <div style={{ marginBottom:'1rem' }}>
