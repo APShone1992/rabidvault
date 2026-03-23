@@ -1,3 +1,10 @@
+import Home from "./pages/Home";
+
+export default function App() {
+  return <Home />;
+}
+
+
 import { useState, useEffect } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { CollectionProvider } from './context/CollectionContext'
