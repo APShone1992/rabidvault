@@ -2,14 +2,13 @@
 // Verifies CGC and CBCS cert numbers by scraping the grading company registries
 // Deploy: supabase functions deploy cgc-verify
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   try {
