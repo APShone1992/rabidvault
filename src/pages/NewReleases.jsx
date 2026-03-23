@@ -9,9 +9,9 @@ const PUBLISHERS = ['All', 'Marvel', 'DC', 'Image', 'Dark Horse', 'IDW', 'BOOM!'
 // Normalise inconsistent publisher names from ComicVine
 function normPub(pub) {
   if (!pub) return 'Other'
-  const p = pub.toLowerCase()
+  const p = pub.toLowerCase().trim()
   if (p.includes('marvel'))     return 'Marvel'
-  if (p.includes('dc'))         return 'DC'
+  if (p === 'dc' || p === 'dc comics' || p.startsWith('dc ') || p.endsWith(' dc')) return 'DC'
   if (p.includes('image'))      return 'Image'
   if (p.includes('dark horse')) return 'Dark Horse'
   if (p.includes('idw'))        return 'IDW'
