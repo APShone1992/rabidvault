@@ -6,11 +6,13 @@
 const PROXY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/comicvine-proxy`
 const ANON  = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-// Route ComicVine image URLs through the proxy to avoid hotlink blocking
+// ComicVine images load fine directly in <img> tags — CORS only blocks fetch() API calls
+// We only need to proxy the JSON API endpoints, not the image URLs themselves
 function proxyImage(url) {
   if (!url) return ''
-  if (url.includes('comicvine-proxy?image=')) return url
-  return `${PROXY}?image=${encodeURIComponent(url)}`
+  // Return the direct URL — browsers can load images cross-origin fine
+  // The proxy is only needed for fetch() API calls which are blocked by CORS
+  return url
 }
 
 async function cv(endpoint, params = {}) {
