@@ -1,6 +1,5 @@
 // ================================================================
 // UPCOMING RELEASES + VARIANT COVERS  — ComicVine API
-// All requests proxied through Supabase Edge Function
 // ================================================================
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -9,13 +8,11 @@ const PROXY        = `${SUPABASE_URL}/functions/v1/comicvine-proxy`
 
 async function cv(endpoint, params = {}) {
   if (!SUPABASE_URL || SUPABASE_URL === 'undefined') {
-    throw new Error('VITE_SUPABASE_URL is not set — check your GitHub secrets')
+    throw new Error('VITE_SUPABASE_URL is not set')
   }
-
   const url = new URL(PROXY)
   url.searchParams.set('endpoint', endpoint)
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
-
   const res = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${ANON_KEY}` },
   })
@@ -33,14 +30,26 @@ function stripHtml(h = '') {
   return h.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, 600)
 }
 
+// Extract cover URL from any possible image field structure ComicVine returns
+function getCoverUrl(image) {
+  if (!image) return ''
+  return image.medium_url
+    || image.original_url
+    || image.screen_url
+    || image.small_url
+    || image.thumb_url
+    || image.super_url
+    || ''
+}
+
 export function norm(raw) {
   return {
     comicvine_id: String(raw.id),
     title:        raw.volume?.name || raw.name || 'Unknown',
     issue_number: raw.issue_number ? `#${raw.issue_number}` : '',
     publisher:    raw.volume?.publisher?.name || '',
-    cover_url:    raw.image?.medium_url || raw.image?.original_url || '',
-    thumb_url:    raw.image?.thumb_url  || raw.image?.medium_url   || '',
+    cover_url:    getCoverUrl(raw.image),
+    thumb_url:    raw.image?.thumb_url || raw.image?.medium_url || '',
     releaseDate:  raw.cover_date || '',
     variantCount: (raw.associated_images || []).length,
     hasVariants:  (raw.associated_images || []).length > 0,
@@ -62,7 +71,14 @@ export async function fetchUpcomingReleases(monthsAhead = 4) {
       limit:      100,
     })
 
-    return (data.results || []).map(norm)
+    const results = data.results || []
+    console.log('[releases] fetched', results.length, 'issues')
+    if (results.length > 0) {
+      console.log('[releases] sample publisher:', results[0]?.volume?.publisher?.name)
+      console.log('[releases] sample image:', JSON.stringify(results[0]?.image))
+    }
+
+    return results.map(norm)
   } catch (err) {
     console.warn('[releases]', err?.message)
     return []
@@ -82,8 +98,8 @@ export async function fetchVariants(comicvineId) {
     const mainCover = {
       id:     `main-${issue.id}`,
       label:  'Main Cover',
-      url:    issue.image?.original_url || issue.image?.medium_url || '',
-      thumb:  issue.image?.medium_url   || issue.image?.thumb_url  || '',
+      url:    getCoverUrl(issue.image),
+      thumb:  issue.image?.medium_url || issue.image?.thumb_url || '',
       isMain: true,
     }
 
@@ -114,14 +130,12 @@ export async function searchUpcoming(query, monthsAhead = 6) {
     const today  = new Date()
     const future = new Date(today)
     future.setMonth(future.getMonth() + monthsAhead)
-
     const data = await cv('search', {
       query,
       resources:  'issue',
       field_list: 'id,name,issue_number,cover_date,image,volume,associated_images',
       limit:      20,
     })
-
     return (data.results || [])
       .filter(i => { const d = new Date(i.cover_date); return d >= today && d <= future })
       .map(norm)
