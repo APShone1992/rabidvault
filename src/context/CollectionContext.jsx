@@ -23,7 +23,7 @@ export function CollectionProvider({ children }) {
           comics (
             id, title, issue_number, publisher,
             cover_url, comicvine_id,
-            volume_id, volume_issue_count, deck
+            volume_id, volume_issue_count, deck, description
           )
         `)
         .eq('user_id', user?.id)
@@ -117,7 +117,7 @@ export function CollectionProvider({ children }) {
 
     const { data, error } = await supabase.from('collection')
       .insert({ user_id: user.id, comic_id: comic.id, grade, paid_price, current_value, notes })
-      .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck)')
+      .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck,description)')
       .single()
     if (error) return { error: error.message }
     setCollection(prev => [data, ...prev])
@@ -127,7 +127,7 @@ export function CollectionProvider({ children }) {
   async function updateComic(id, updates) {
     const { data, error } = await supabase.from('collection')
       .update(updates).eq('id', id).eq('user_id', user.id)
-      .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck)')
+      .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck,description)')
       .single()
     if (error) return { error: error.message }
     setCollection(prev => prev.map(c => c.id === id ? data : c))
@@ -146,7 +146,7 @@ export function CollectionProvider({ children }) {
     const now = new Date().toISOString()
     const { data, error } = await supabase.from('collection')
       .update({ read_at: now }).eq('id', id).eq('user_id', user.id)
-      .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck)')
+      .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck,description)')
       .single()
     if (!error) setCollection(prev => prev.map(c => c.id === id ? data : c))
     return { error }
@@ -155,7 +155,7 @@ export function CollectionProvider({ children }) {
   async function markUnread(id) {
     const { data, error } = await supabase.from('collection')
       .update({ read_at: null }).eq('id', id).eq('user_id', user.id)
-      .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck)')
+      .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck,description)')
       .single()
     if (!error) setCollection(prev => prev.map(c => c.id === id ? data : c))
     return { error }
@@ -168,7 +168,7 @@ export function CollectionProvider({ children }) {
         .update({ reading_order: order })
         .eq('id', id)
         .eq('user_id', user?.id)
-        .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck)')
+        .select('*, comics(id,title,issue_number,publisher,cover_url,comicvine_id,volume_id,volume_issue_count,deck,description)')
         .single()
       if (error) return { error: error.message }
       setCollection(prev => prev.map(c => c.id === id ? data : c))
