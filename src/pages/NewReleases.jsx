@@ -1,405 +1,153 @@
-import { useState, useEffect, useCallback } from 'react'
-import { fetchUpcomingReleases, fetchVariants, groupByWeek } from '../lib/releases'
-import { buildEbayActiveUrl } from '../lib/comicvine'
-import { useWishlist } from '../hooks/useWishlist'
-import './NewReleases.css'
+// ================================================================
+// UPCOMING RELEASES + VARIANT COVERS  — ComicVine API
+// All requests proxied through Supabase Edge Function
+// ================================================================
 
-const PUBLISHERS = ['All', 'Marvel', 'DC', 'Image', 'Dark Horse', 'IDW', 'BOOM!']
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const ANON_KEY     = import.meta.env.VITE_SUPABASE_ANON_KEY
+const PROXY        = `${SUPABASE_URL}/functions/v1/comicvine-proxy`
 
-// Map various publisher name formats from ComicVine to our tab labels
-function normalisePublisher(pub) {
-  if (!pub) return 'Other'
-  const p = pub.toLowerCase()
-  if (p.includes('marvel'))     return 'Marvel'
-  if (p.includes('dc ') || p === 'dc' || p.includes('dc comics')) return 'DC'
-  if (p.includes('image'))      return 'Image'
-  if (p.includes('dark horse')) return 'Dark Horse'
-  if (p.includes('idw'))        return 'IDW'
-  if (p.includes('boom'))       return 'BOOM!'
-  return pub
-}
-
-const FALLBACK = { Marvel: '🕷️', DC: '🦇', Image: '🚀', Default: '📖' }
-
-const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/comicvine-proxy`
-
-// ComicVine images load fine directly in <img> tags
-// CORS only affects fetch() API calls, not image src attributes
-function ensureProxied(url) {
-  if (!url) return ''
-  // Strip any previously added proxy wrapper and return direct URL
-  if (url.includes('comicvine-proxy?image=')) {
-    try {
-      const inner = url.split('comicvine-proxy?image=')[1]
-      return decodeURIComponent(inner)
-    } catch { return url }
-  }
-  return url
-}
-
-const DEMO = {
-  '2026-03-26': [
-    { comicvine_id:'d1', title:'Ultimate Spider-Man', issue_number:'#14', publisher:'Marvel', cover_url:'', releaseDate:'2026-03-26', hasVariants:true, variantCount:4 },
-    { comicvine_id:'d2', title:'Batman', issue_number:'#155', publisher:'DC', cover_url:'', releaseDate:'2026-03-26', hasVariants:true, variantCount:3 },
-    { comicvine_id:'d3', title:'Invincible', issue_number:'#151', publisher:'Image', cover_url:'', releaseDate:'2026-03-26', hasVariants:false, variantCount:0 },
-    { comicvine_id:'d4', title:'X-Men', issue_number:'#25', publisher:'Marvel', cover_url:'', releaseDate:'2026-03-26', hasVariants:true, variantCount:5 },
-    { comicvine_id:'d5', title:'Saga', issue_number:'#70', publisher:'Image', cover_url:'', releaseDate:'2026-03-26', hasVariants:false, variantCount:0 },
-    { comicvine_id:'d6', title:'Thor', issue_number:'#34', publisher:'Marvel', cover_url:'', releaseDate:'2026-03-26', hasVariants:true, variantCount:3 },
-  ],
-  '2026-04-02': [
-    { comicvine_id:'d7', title:'Daredevil', issue_number:'#8', publisher:'Marvel', cover_url:'', releaseDate:'2026-04-02', hasVariants:true, variantCount:2 },
-    { comicvine_id:'d8', title:'Detective Comics', issue_number:'#1085', publisher:'DC', cover_url:'', releaseDate:'2026-04-02', hasVariants:true, variantCount:3 },
-    { comicvine_id:'d9', title:'The Walking Dead Deluxe', issue_number:'#88', publisher:'Image', cover_url:'', releaseDate:'2026-04-02', hasVariants:false, variantCount:0 },
-    { comicvine_id:'d10', title:'Wolverine', issue_number:'#12', publisher:'Marvel', cover_url:'', releaseDate:'2026-04-02', hasVariants:true, variantCount:6 },
-  ],
-}
-
-export default function NewReleases() {
-  const { addItem } = useWishlist()
-  const [grouped, setGrouped]         = useState({})
-  const [loading, setLoading]         = useState(true)
-  const [error, setError]             = useState('')
-  const [filterPub, setFilterPub]     = useState('All')
-  const [search, setSearch]           = useState('')
-  const [monthsAhead, setMonthsAhead] = useState(3)
-  const [selected, setSelected]       = useState(null)
-  const [variantData, setVariantData] = useState(null)
-  const [variantLoading, setVLoad]    = useState(false)
-  const [added, setAdded]             = useState({})
-  const [activeCover, setActiveCover] = useState(null)
-
-  const load = useCallback(async () => {
-    setLoading(true); setError('')
-    try {
-      const data = await fetchUpcomingReleases(monthsAhead)
-      if (!data || data.length === 0) {
-        // API returned nothing - show demo data with a warning
-        setError('ComicVine returned no results. Check your API key is set in Supabase edge function secrets. Showing demo data.')
-        setGrouped(DEMO)
-      } else {
-        // Normalise publisher names and ensure covers are proxied
-        const normalised = data.map(issue => ({
-          ...issue,
-          publisher: normalisePublisher(issue.publisher),
-          cover_url: ensureProxied(issue.cover_url),
-        }))
-        setGrouped(groupByWeek(normalised))
-      }
-    } catch (err) {
-      setError('Could not reach ComicVine. Showing demo data.')
-      setGrouped(DEMO)
-    }
-    setLoading(false)
-  }, [monthsAhead])
-
-  useEffect(() => { load() }, [load])
-
-  const openIssue = async (issue) => {
-    setSelected(issue); setVariantData(null); setActiveCover(null); setVLoad(true)
-    try {
-      const d = await fetchVariants(issue.comicvine_id)
-      if (d) {
-        // Ensure all cover URLs in variant data are proxied
-        const proxiedCovers = (d.covers || []).map(c => ({
-          ...c,
-          url:   ensureProxied(c.url),
-          thumb: ensureProxied(c.thumb),
-        }))
-        const proxiedData = { ...d, covers: proxiedCovers }
-        setVariantData(proxiedData)
-        setActiveCover(proxiedData.covers?.[0] || null)
-      } else {
-        const fallback = {
-          ...issue,
-          covers: [{ id:'main', label:'Main Cover', url: ensureProxied(issue.cover_url), thumb: ensureProxied(issue.cover_url), isMain:true }],
-          characters:[], storyArcs:[], description:'',
-        }
-        setVariantData(fallback)
-        setActiveCover(fallback.covers[0])
-      }
-    } catch {
-      const fallback = {
-        ...issue,
-        covers: [{ id:'main', label:'Main Cover', url: ensureProxied(issue.cover_url), thumb: ensureProxied(issue.cover_url), isMain:true }],
-        characters:[], storyArcs:[], description:'',
-      }
-      setVariantData(fallback)
-      setActiveCover(fallback.covers[0])
-    }
-    setVLoad(false)
+async function cv(endpoint, params = {}) {
+  if (!SUPABASE_URL || SUPABASE_URL === 'undefined') {
+    throw new Error('VITE_SUPABASE_URL is not set — check your GitHub secrets')
   }
 
-  const handleAdd = async (issue, cover) => {
-    const label = cover?.label || 'Main Cover'
-    const key   = `${issue.comicvine_id}-${label}`
-    await addItem({
-      title:        `${issue.title} ${issue.issue_number}${label !== 'Main Cover' ? ` [${label}]` : ''}`,
-      issue_number: issue.issue_number,
-      publisher:    issue.publisher,
-      cover_url:    ensureProxied(cover?.url || issue.cover_url),
-      notes:        `Upcoming ${new Date(issue.releaseDate).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})} · ${label}`,
-      priority:     'Medium',
-      target_price: 0,
+  const url = new URL(PROXY)
+  url.searchParams.set('endpoint', endpoint)
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${ANON_KEY}` },
+  })
+  if (!res.ok) throw new Error(`CV proxy error: ${res.status}`)
+  const data = await res.json()
+  if (data.error) throw new Error(data.error)
+  return data
+}
+
+function fmt(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`
+}
+
+function stripHtml(h = '') {
+  return h.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, 600)
+}
+
+export function norm(raw) {
+  return {
+    comicvine_id: String(raw.id),
+    title:        raw.volume?.name || raw.name || 'Unknown',
+    issue_number: raw.issue_number ? `#${raw.issue_number}` : '',
+    publisher:    raw.volume?.publisher?.name || '',
+    cover_url:    raw.image?.medium_url || raw.image?.original_url || '',
+    thumb_url:    raw.image?.thumb_url  || raw.image?.medium_url   || '',
+    releaseDate:  raw.cover_date || '',
+    variantCount: (raw.associated_images || []).length,
+    hasVariants:  (raw.associated_images || []).length > 0,
+  }
+}
+
+// ── Upcoming releases ─────────────────────────────────────────
+export async function fetchUpcomingReleases(monthsAhead = 4) {
+  try {
+    const today  = new Date()
+    const start  = new Date(today.getFullYear(), today.getMonth(), 1)
+    const future = new Date(today)
+    future.setMonth(future.getMonth() + monthsAhead)
+
+    const data = await cv('issues', {
+      filter:     `cover_date:${fmt(start)}|${fmt(future)}`,
+      field_list: 'id,name,issue_number,cover_date,image,volume,associated_images',
+      sort:       'cover_date:asc',
+      limit:      100,
     })
-    setAdded(prev => ({ ...prev, [key]: true }))
-  }
 
-  const filtered = Object.entries(grouped).reduce((acc,[week,issues]) => {
-    const f = issues.filter(i =>
-      (filterPub === 'All' || i.publisher === filterPub) &&
-      (!search || i.title.toLowerCase().includes(search.toLowerCase()))
-    )
-    if (f.length) acc[week] = f
+    return (data.results || []).map(norm)
+  } catch (err) {
+    console.warn('[releases]', err?.message)
+    return []
+  }
+}
+
+// ── Full issue detail + variant covers ────────────────────────
+export async function fetchVariants(comicvineId) {
+  try {
+    const data = await cv(`issue/4000-${comicvineId}`, {
+      field_list: 'id,name,issue_number,image,associated_images,volume,cover_date,description,character_credits,story_arc_credits',
+    })
+
+    const issue = data.results
+    if (!issue) return null
+
+    const mainCover = {
+      id:     `main-${issue.id}`,
+      label:  'Main Cover',
+      url:    issue.image?.original_url || issue.image?.medium_url || '',
+      thumb:  issue.image?.medium_url   || issue.image?.thumb_url  || '',
+      isMain: true,
+    }
+
+    const variants = (issue.associated_images || []).map((img, i) => ({
+      id:     `v-${issue.id}-${i}`,
+      label:  `Variant ${String.fromCharCode(65 + i)}`,
+      url:    img.original_url || img.medium_url || '',
+      thumb:  img.medium_url   || img.original_url || '',
+      isMain: false,
+    }))
+
+    return {
+      ...norm(issue),
+      covers:      [mainCover, ...variants],
+      characters:  (issue.character_credits || []).slice(0, 8).map(c => c.name),
+      storyArcs:   (issue.story_arc_credits || []).map(a => a.name),
+      description: stripHtml(issue.description || ''),
+    }
+  } catch (err) {
+    console.warn('[releases fetchVariants]', err?.message)
+    return null
+  }
+}
+
+// ── Search upcoming ───────────────────────────────────────────
+export async function searchUpcoming(query, monthsAhead = 6) {
+  try {
+    const today  = new Date()
+    const future = new Date(today)
+    future.setMonth(future.getMonth() + monthsAhead)
+
+    const data = await cv('search', {
+      query,
+      resources:  'issue',
+      field_list: 'id,name,issue_number,cover_date,image,volume,associated_images',
+      limit:      20,
+    })
+
+    return (data.results || [])
+      .filter(i => { const d = new Date(i.cover_date); return d >= today && d <= future })
+      .map(norm)
+  } catch (err) {
+    console.warn('[releases searchUpcoming]', err?.message)
+    return []
+  }
+}
+
+// ── Group by Wednesday release week ──────────────────────────
+export function groupByWeek(issues) {
+  return issues.reduce((acc, issue) => {
+    const d = new Date(issue.releaseDate)
+    if (isNaN(d)) return acc
+    const wed = new Date(d)
+    const day = wed.getDay()
+    wed.setDate(wed.getDate() + ((day <= 3) ? (3 - day) : (10 - day)))
+    const key = wed.toISOString().split('T')[0]
+    if (!acc[key]) acc[key] = []
+    acc[key].push(issue)
     return acc
   }, {})
+}
 
-  const total = Object.values(filtered).reduce((s,a) => s+a.length, 0)
-
-  return (
-    <div className="page-enter nr-page">
-      <div className="section-header" style={{ marginBottom:'0.5rem' }}>
-        <h1 className="section-title">Upcoming Releases</h1>
-        <div style={{ display:'flex', gap:'0.5rem', alignItems:'center' }}>
-          <select className="form-select" style={{ width:'auto', fontSize:'0.8rem', padding:'0.4rem 0.75rem' }}
-            value={monthsAhead} onChange={e => setMonthsAhead(Number(e.target.value))}>
-            <option value={1}>Next 1 month</option>
-            <option value={2}>Next 2 months</option>
-            <option value={3}>Next 3 months</option>
-            <option value={6}>Next 6 months</option>
-          </select>
-          <button className="btn btn-outline" style={{ fontSize:'0.8rem' }} onClick={load}>↻ Refresh</button>
-        </div>
-      </div>
-
-      <p style={{ color:'var(--muted)', fontSize:'0.85rem', marginBottom:'1.25rem' }}>
-        {loading ? 'Loading from ComicVine…' : `${total} upcoming issues · Click any cover to view variants`}
-      </p>
-
-      {error && (
-        <div style={{ background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.25)', borderRadius:10, padding:'0.85rem 1rem', marginBottom:'1.5rem', color:'#fcd34d', fontSize:'0.82rem' }}>
-          ⚠️ {error}
-        </div>
-      )}
-
-      <div style={{ display:'flex', gap:'0.75rem', marginBottom:'1.5rem', flexWrap:'wrap', alignItems:'center' }}>
-        <input className="form-input" style={{ flex:1, minWidth:180, fontSize:'0.85rem' }}
-          placeholder="Search series..." value={search} onChange={e => setSearch(e.target.value)} />
-        <div className="tabs" style={{ marginBottom:0, flexWrap:'wrap' }}>
-          {PUBLISHERS.map(p => (
-            <button key={p} className={`tab ${filterPub===p?'active':''}`}
-              onClick={() => setFilterPub(p)} style={{ fontSize:'0.72rem', padding:'0.3rem 0.65rem' }}>{p}</button>
-          ))}
-        </div>
-      </div>
-
-      {loading ? (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:'1rem' }}>
-          {Array.from({length:16}).map((_,i) => (
-            <div key={i} className="nr-skeleton" style={{ animationDelay:`${i*0.05}s` }}>
-              <div className="nr-skel-cover" />
-              <div className="nr-skel-line" style={{ width:'80%', marginBottom:4 }} />
-              <div className="nr-skel-line" style={{ width:'55%' }} />
-            </div>
-          ))}
-        </div>
-      ) : Object.keys(filtered).length === 0 ? (
-        <div className="card" style={{ textAlign:'center', padding:'3rem', color:'var(--muted)' }}>
-          <div style={{ fontSize:'3rem', marginBottom:'1rem' }}>🔍</div>
-          <div style={{ fontWeight:700 }}>No upcoming issues match your filters</div>
-        </div>
-      ) : (
-        Object.entries(filtered).map(([weekDate, issues]) => (
-          <div key={weekDate} className="nr-week">
-            <div className="nr-week-header">
-              <div className="nr-week-badge">
-                <span className="nr-week-day">{new Date(weekDate).toLocaleDateString('en-GB',{weekday:'short'})}</span>
-                <span className="nr-week-date">{new Date(weekDate).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</span>
-              </div>
-              <div className="nr-week-line" />
-              <span className="nr-week-count">{issues.length} issue{issues.length!==1?'s':''}</span>
-            </div>
-
-            <div className="nr-grid">
-              {issues.map(issue => (
-                <div key={issue.comicvine_id} className="nr-card" onClick={() => openIssue(issue)}>
-                  <div className="nr-cover-wrap">
-                    {issue.cover_url ? (
-                      <img src={issue.cover_url} alt={`${issue.title} ${issue.issue_number}`}
-                        className="nr-cover-img" loading="lazy"
-                        onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex' }} />
-                    ) : null}
-                    <div className="nr-cover-fallback" style={{ display:issue.cover_url?'none':'flex' }}>
-                      {FALLBACK[issue.publisher] || FALLBACK.Default}
-                    </div>
-                    {issue.hasVariants && (
-                      <div className="nr-variant-badge">+{issue.variantCount} variant{issue.variantCount!==1?'s':''}</div>
-                    )}
-                    <div className="nr-hover-overlay"><div className="nr-hover-text">View Covers & Add</div></div>
-                  </div>
-                  <div className="nr-info">
-                    <div className="nr-pub">{issue.publisher}</div>
-                    <div className="nr-title">{issue.title}</div>
-                    <div className="nr-issue">{issue.issue_number}</div>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'0.4rem' }}>
-                      <div className="nr-date">{new Date(issue.releaseDate).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div>
-                      <button
-                        className={`btn btn-sm ${added[`${issue.comicvine_id}-Main Cover`]?'nr-added':'btn-outline'}`}
-                        style={{ fontSize:'0.62rem', padding:'0.18rem 0.5rem' }}
-                        onClick={e => { e.stopPropagation(); handleAdd(issue, {label:'Main Cover', url:issue.cover_url}) }}
-                      >{added[`${issue.comicvine_id}-Main Cover`]?'✓':'+ Wishlist'}</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))
-      )}
-
-      {/* VARIANT MODAL */}
-      {selected && (
-        <div className="nr-modal-backdrop" onClick={() => { setSelected(null); setVariantData(null) }}>
-          <div className="nr-modal" onClick={e => e.stopPropagation()}>
-            <button className="nr-modal-close" onClick={() => { setSelected(null); setVariantData(null) }}>✕</button>
-            <div className="nr-modal-body">
-              {/* LEFT — cover viewer */}
-              <div className="nr-modal-left">
-                <div className="nr-modal-cover-main">
-                  {variantLoading ? (
-                    activeCover?.url || selected.cover_url ? (
-                      <img loading="lazy"
-                        src={activeCover?.url || selected.cover_url}
-                        alt={selected.title}
-                        style={{ width:'100%', height:'100%', objectFit:'contain', borderRadius:8, opacity:0.6 }} />
-                    ) : (
-                      <div className="nr-modal-loading"><div className="nr-spin" /><div style={{ fontSize:'0.82rem', color:'var(--muted)', marginTop:'0.75rem' }}>Loading covers…</div></div>
-                    )
-                  ) : activeCover?.url ? (
-                    <img loading="lazy" src={activeCover.url} alt={activeCover.label} style={{ width:'100%', height:'100%', objectFit:'contain', borderRadius:8 }} />
-                  ) : selected.cover_url ? (
-                    <img loading="lazy" src={selected.cover_url} alt={selected.title} style={{ width:'100%', height:'100%', objectFit:'contain', borderRadius:8 }} />
-                  ) : (
-                    <div style={{ fontSize:'5rem', display:'flex', alignItems:'center', justifyContent:'center', height:'100%' }}>
-                      {FALLBACK[selected.publisher] || FALLBACK.Default}
-                    </div>
-                  )}
-                </div>
-
-                {variantData?.covers?.length > 1 && (
-                  <div className="nr-variant-strip">
-                    {variantData.covers.map(cover => (
-                      <div key={cover.id} className={`nr-variant-thumb ${activeCover?.id===cover.id?'active':''}`}
-                        onClick={() => setActiveCover(cover)}>
-                        {cover.thumb
-                          ? <img loading="lazy" src={cover.thumb} alt={cover.label} style={{ width:'100%', height:'100%', objectFit:'cover', borderRadius:6, border: activeCover?.id===cover.id?'2px solid var(--purple)':'2px solid transparent' }} />
-                          : <div style={{ width:56, height:80, background:'var(--bg3)', borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.4rem', border: activeCover?.id===cover.id?'2px solid var(--purple)':'2px solid transparent' }}>📖</div>
-                        }
-                        <div className="nr-variant-label">{cover.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {activeCover && (
-                  <div style={{ fontSize:'0.78rem', fontWeight:700, color:'var(--purple-light)', textAlign:'center' }}>
-                    {activeCover.label}
-                  </div>
-                )}
-              </div>
-
-              {/* RIGHT — details + wishlist */}
-              <div className="nr-modal-right">
-                <div className="nr-modal-pub">{selected.publisher}</div>
-                <h2 className="nr-modal-title">{selected.title}</h2>
-                <div className="nr-modal-issue">{selected.issue_number}</div>
-
-                <div style={{ display:'flex', gap:'0.6rem', marginBottom:'1.25rem', flexWrap:'wrap' }}>
-                  <div className="nr-modal-chip">
-                    📅 {new Date(selected.releaseDate).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}
-                  </div>
-                  {variantData?.covers?.length > 1 && (
-                    <div className="nr-modal-chip" style={{ background:'rgba(139,92,246,0.15)', color:'var(--purple-light)', borderColor:'rgba(139,92,246,0.3)' }}>
-                      🎨 {variantData.covers.length - 1} variant{variantData.covers.length-1!==1?'s':''}
-                    </div>
-                  )}
-                </div>
-
-                {/* Show description from variantData or a loading state */}
-                {variantLoading ? (
-                  <div style={{ fontSize:'0.82rem', color:'var(--muted)', marginBottom:'1.25rem' }}>Loading details…</div>
-                ) : variantData?.description ? (
-                  <p style={{ fontSize:'0.83rem', color:'var(--muted)', lineHeight:1.65, marginBottom:'1.25rem' }}>
-                    {variantData.description}
-                  </p>
-                ) : (
-                  <p style={{ fontSize:'0.83rem', color:'var(--muted)', lineHeight:1.65, marginBottom:'1.25rem', fontStyle:'italic' }}>
-                    No summary available for this issue.
-                  </p>
-                )}
-
-                {variantData?.characters?.length > 0 && (
-                  <div style={{ marginBottom:'1rem' }}>
-                    <div style={{ fontSize:'0.68rem', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:'0.4rem' }}>Characters</div>
-                    <div style={{ display:'flex', gap:'0.4rem', flexWrap:'wrap' }}>
-                      {variantData.characters.map(c => (
-                        <span key={c} style={{ padding:'0.2rem 0.6rem', background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:20, fontSize:'0.73rem', fontWeight:600 }}>{c}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {variantData?.storyArcs?.length > 0 && (
-                  <div style={{ marginBottom:'1.25rem' }}>
-                    <div style={{ fontSize:'0.68rem', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:'0.4rem' }}>Story Arc</div>
-                    <div style={{ fontSize:'0.85rem', color:'var(--purple-light)', fontWeight:700 }}>{variantData.storyArcs.join(', ')}</div>
-                  </div>
-                )}
-
-                <a
-                  href={buildEbayActiveUrl(selected.title, selected.issue_number, null)}
-                  target="_blank" rel="noopener noreferrer"
-                  className="btn btn-outline btn-sm"
-                  style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'0.4rem', textDecoration:'none', marginBottom:'1rem', fontSize:'0.8rem' }}
-                >
-                  🛒 Check eBay Listings
-                </a>
-
-                <div style={{ fontSize:'0.68rem', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:'0.75rem' }}>
-                  Add to Wishlist
-                </div>
-
-                <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem', maxHeight:260, overflowY:'auto' }}>
-                  {(variantData?.covers || [{ id:'main', label:'Main Cover', url: ensureProxied(selected.cover_url), thumb: ensureProxied(selected.cover_url), isMain:true }]).map(cover => {
-                    const key = `${selected.comicvine_id}-${cover.label}`
-                    return (
-                      <div key={cover.id} style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.65rem 0.8rem', background:'var(--bg3)', borderRadius:8, border:'1px solid var(--border)' }}>
-                        {cover.thumb
-                          ? <img loading="lazy" src={cover.thumb} alt="" style={{ width:30, height:42, objectFit:'cover', borderRadius:4, flexShrink:0 }} />
-                          : <div style={{ width:30, height:42, background:'var(--card)', borderRadius:4, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.9rem', flexShrink:0 }}>📖</div>
-                        }
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontWeight:700, fontSize:'0.82rem' }}>{cover.label}</div>
-                          <div style={{ fontSize:'0.7rem', color:'var(--muted)' }}>{selected.title} {selected.issue_number}</div>
-                        </div>
-                        <button
-                          className="btn btn-sm"
-                          style={added[key]
-                            ? { background:'rgba(16,185,129,0.15)', color:'var(--green)', border:'1px solid var(--green)', fontSize:'0.72rem', padding:'0.25rem 0.6rem' }
-                            : { background:'var(--purple)', color:'#fff', border:'none', fontSize:'0.72rem', padding:'0.25rem 0.6rem' }
-                          }
-                          onClick={() => !added[key] && handleAdd(selected, cover)}
-                        >
-                          {added[key] ? '✓ Added' : '+ Add'}
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+export function formatWeekLabel(dateStr) {
+  return new Date(dateStr).toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  })
 }
