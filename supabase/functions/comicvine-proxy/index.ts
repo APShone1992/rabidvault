@@ -1,8 +1,5 @@
 // supabase/functions/comicvine-proxy/index.ts
 // Deploy with: supabase functions deploy comicvine-proxy
-// Proxies both API calls AND cover images to avoid CORS/hotlink blocking
-
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
 const COMICVINE_BASE = 'https://comicvine.gamespot.com/api'
 const API_KEY = Deno.env.get('COMICVINE_API_KEY') ?? ''
@@ -12,39 +9,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   const url = new URL(req.url)
-
-  // ── Image proxy ───────────────────────────────────────────────
-  const imageUrl = url.searchParams.get('image')
-  if (imageUrl) {
-    try {
-      const res = await fetch(imageUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; TheRabidVault/1.0)',
-          'Referer': 'https://comicvine.gamespot.com/',
-        },
-      })
-      if (!res.ok) {
-        return new Response('Image not found', { status: 404, headers: corsHeaders })
-      }
-      const contentType = res.headers.get('content-type') || 'image/jpeg'
-      const imageData = await res.arrayBuffer()
-      return new Response(imageData, {
-        headers: {
-          ...corsHeaders,
-          'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=86400',
-        },
-      })
-    } catch (err) {
-      return new Response('Image fetch failed', { status: 500, headers: corsHeaders })
-    }
-  }
 
   // ── API proxy ─────────────────────────────────────────────────
   if (!API_KEY) {
@@ -77,7 +47,7 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
