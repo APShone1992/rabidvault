@@ -5,7 +5,7 @@
   "version": "3.0.0",
   "type": "module",
   "description": "Track, value and discover your comic book collection",
-  "homepage": "https://YOUR_GITHUB_USERNAME.github.io/rabidvault",
+  "homepage": "https://APShone1992.github.io/rabidvault",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
