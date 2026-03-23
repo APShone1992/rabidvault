@@ -3,24 +3,21 @@
 // All requests proxied through Supabase Edge Function
 // ================================================================
 
-const PROXY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/comicvine-proxy`
-const ANON  = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-// ComicVine images load fine directly in <img> tags — CORS only blocks fetch() API calls
-// We only need to proxy the JSON API endpoints, not the image URLs themselves
-function proxyImage(url) {
-  if (!url) return ''
-  // Return the direct URL — browsers can load images cross-origin fine
-  // The proxy is only needed for fetch() API calls which are blocked by CORS
-  return url
-}
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const ANON_KEY     = import.meta.env.VITE_SUPABASE_ANON_KEY
+const PROXY        = `${SUPABASE_URL}/functions/v1/comicvine-proxy`
 
 async function cv(endpoint, params = {}) {
+  if (!SUPABASE_URL || SUPABASE_URL === 'undefined') {
+    throw new Error('VITE_SUPABASE_URL is not set — check your GitHub secrets')
+  }
+
   const url = new URL(PROXY)
   url.searchParams.set('endpoint', endpoint)
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
+
   const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${ANON}` },
+    headers: { Authorization: `Bearer ${ANON_KEY}` },
   })
   if (!res.ok) throw new Error(`CV proxy error: ${res.status}`)
   const data = await res.json()
@@ -33,7 +30,7 @@ function fmt(d) {
 }
 
 function stripHtml(h = '') {
-  return h.replace(/<[^>]*>/g,'').replace(/&amp;/g,'&').replace(/&nbsp;/g,' ').replace(/\s{2,}/g,' ').trim().slice(0,600)
+  return h.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, 600)
 }
 
 export function norm(raw) {
@@ -42,19 +39,18 @@ export function norm(raw) {
     title:        raw.volume?.name || raw.name || 'Unknown',
     issue_number: raw.issue_number ? `#${raw.issue_number}` : '',
     publisher:    raw.volume?.publisher?.name || '',
-    cover_url:    proxyImage(raw.image?.medium_url   || raw.image?.original_url || ''),
-    thumb_url:    proxyImage(raw.image?.thumb_url    || raw.image?.medium_url   || ''),
+    cover_url:    raw.image?.medium_url || raw.image?.original_url || '',
+    thumb_url:    raw.image?.thumb_url  || raw.image?.medium_url   || '',
     releaseDate:  raw.cover_date || '',
     variantCount: (raw.associated_images || []).length,
     hasVariants:  (raw.associated_images || []).length > 0,
   }
 }
 
-// ── Upcoming releases grouped by release week ─────────────────
+// ── Upcoming releases ─────────────────────────────────────────
 export async function fetchUpcomingReleases(monthsAhead = 4) {
   try {
     const today  = new Date()
-    // Start from beginning of current month — ComicVine uses 1st of month for cover_date
     const start  = new Date(today.getFullYear(), today.getMonth(), 1)
     const future = new Date(today)
     future.setMonth(future.getMonth() + monthsAhead)
@@ -73,7 +69,7 @@ export async function fetchUpcomingReleases(monthsAhead = 4) {
   }
 }
 
-// ── Full issue detail + all variant covers ────────────────────
+// ── Full issue detail + variant covers ────────────────────────
 export async function fetchVariants(comicvineId) {
   try {
     const data = await cv(`issue/4000-${comicvineId}`, {
@@ -86,24 +82,24 @@ export async function fetchVariants(comicvineId) {
     const mainCover = {
       id:     `main-${issue.id}`,
       label:  'Main Cover',
-      url:    proxyImage(issue.image?.original_url || issue.image?.medium_url || ''),
-      thumb:  proxyImage(issue.image?.medium_url   || issue.image?.thumb_url  || ''),
+      url:    issue.image?.original_url || issue.image?.medium_url || '',
+      thumb:  issue.image?.medium_url   || issue.image?.thumb_url  || '',
       isMain: true,
     }
 
     const variants = (issue.associated_images || []).map((img, i) => ({
       id:     `v-${issue.id}-${i}`,
       label:  `Variant ${String.fromCharCode(65 + i)}`,
-      url:    proxyImage(img.original_url || img.medium_url || ''),
-      thumb:  proxyImage(img.medium_url   || img.original_url || ''),
+      url:    img.original_url || img.medium_url || '',
+      thumb:  img.medium_url   || img.original_url || '',
       isMain: false,
     }))
 
     return {
       ...norm(issue),
       covers:      [mainCover, ...variants],
-      characters:  (issue.character_credits  || []).slice(0, 8).map(c => c.name),
-      storyArcs:   (issue.story_arc_credits  || []).map(a => a.name),
+      characters:  (issue.character_credits || []).slice(0, 8).map(c => c.name),
+      storyArcs:   (issue.story_arc_credits || []).map(a => a.name),
       description: stripHtml(issue.description || ''),
     }
   } catch (err) {
@@ -135,10 +131,10 @@ export async function searchUpcoming(query, monthsAhead = 6) {
   }
 }
 
-// ── Group issues by Wednesday release date ────────────────────
+// ── Group by Wednesday release week ──────────────────────────
 export function groupByWeek(issues) {
   return issues.reduce((acc, issue) => {
-    const d   = new Date(issue.releaseDate)
+    const d = new Date(issue.releaseDate)
     if (isNaN(d)) return acc
     const wed = new Date(d)
     const day = wed.getDay()
