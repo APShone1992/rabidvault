@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">The Rabid Vault</string>
+    <string name="title_activity_main">The Rabid Vault</string>
+    <string name="package_name">com.rabidvault.app</string>
+    <string name="custom_url_scheme">com.rabidvault.app</string>
+</resources>

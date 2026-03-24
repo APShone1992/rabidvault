@@ -1,0 +1,81 @@
+// Central icon exports — all from lucide-react
+// Change an icon here and it updates everywhere in the app
+export {
+  // Navigation
+  LayoutDashboard as IconDashboard,
+  Library         as IconCollection,
+  Plus            as IconAdd,
+  BarChart2       as IconAnalytics,
+  BookOpen        as IconSeries,
+  Calendar        as IconReleases,
+  TrendingUp      as IconMarket,
+  Star            as IconWishlist,
+  Users           as IconFriends,
+  Trophy          as IconAchievements,
+  Settings        as IconSettings,
+
+  // Actions
+  Search          as IconSearch,
+  ScanLine        as IconScan,
+  Barcode         as IconBarcode,
+  Camera          as IconCamera,
+  Upload          as IconUpload,
+  Download        as IconDownload,
+  FileText        as IconCSV,
+  Printer         as IconPDF,
+  Trash2          as IconDelete,
+  Edit2           as IconEdit,
+  X               as IconClose,
+  CheckSquare     as IconBulk,
+  RefreshCw       as IconRefresh,
+  ArrowLeft       as IconBack,
+  BookOpen        as IconBook,
+  Link2           as IconLink,
+  Share2          as IconShare,
+  Copy            as IconCopy,
+  ExternalLink    as IconExternal,
+
+  // Comics / Value
+  BookMarked      as IconRead,
+  BookOpenCheck   as IconReadDone,
+  ShoppingCart    as IconEbay,
+  Tag             as IconPrice,
+  TrendingUp      as IconROIUp,
+  TrendingDown    as IconROIDown,
+  DollarSign      as IconValue,
+  Gem             as IconGrade,
+  Image           as IconCover,
+
+  // Status / Feedback
+  Bell            as IconBell,
+  BellRing        as IconBellActive,
+  CheckCircle     as IconSuccess,
+  AlertCircle     as IconWarning,
+  Info            as IconInfo,
+  Shield          as IconCGC,
+  Wifi            as IconOnline,
+  WifiOff         as IconOffline,
+  Circle          as IconDot,
+  Sparkles        as IconNew,
+  Zap             as IconXP,
+  Lock            as IconLocked,
+  Unlock          as IconUnlocked,
+
+  // Layout
+  Grid3X3         as IconGrid,
+  List            as IconList,
+  Filter          as IconFilter,
+  SortAsc         as IconSort,
+  ChevronRight    as IconChevron,
+  Building2       as IconPublisher,
+  UserCircle      as IconProfile,
+  LogOut          as IconSignOut,
+  Menu            as IconMenu,
+  Command         as IconCommand,
+
+  // Friends
+  UserPlus        as IconAddFriend,
+  UserCheck       as IconFriendDone,
+  Scale           as IconCompare,
+  Medal           as IconLeaderboard,
+} from 'lucide-react'
