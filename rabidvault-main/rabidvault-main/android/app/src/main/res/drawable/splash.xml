@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Splash screen background - replace with your actual logo PNG -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="#0d0d12"/>
-</shape>
